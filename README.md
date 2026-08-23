@@ -1,4 +1,4 @@
-# ulam
+# ulam-prng
 
 Seeded random number generation for generative art.
 
@@ -13,7 +13,7 @@ Named for Stanisław Ulam, who invented the Monte Carlo method while playing
 solitaire in a hospital bed and wondering what the odds actually were.
 
 ```ts
-import { RNG } from "ulam";
+import { RNG } from "ulam-prng";
 
 const rng = new RNG(12345);
 
@@ -27,7 +27,7 @@ rng.poissonDiskPoints({ minDist: 0.05 }); // 266 evenly-spread points
 ## Install
 
 ```sh
-pnpm add ulam
+pnpm add ulam-prng
 ```
 
 TypeScript types are included. ESM only.
@@ -148,7 +148,7 @@ The underlying implementation of Bridson's algorithm is exported too, if you
 want to drive it from some other source of randomness:
 
 ```ts
-import { poissonDiskPoints, PoissonDiskSampling } from "ulam";
+import { poissonDiskPoints, PoissonDiskSampling } from "ulam-prng";
 
 poissonDiskPoints({
   width: 1,

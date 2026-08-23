@@ -1,6 +1,6 @@
 /**
- * ulam: seeded random number generation for generative art.
- * @module ulam
+ * ulam-prng: seeded random number generation for generative art.
+ * @module ulam-prng
  */
 
 export { RNG } from "./rng.js";
