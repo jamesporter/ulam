@@ -4,8 +4,9 @@ Seeded random number generation for generative art.
 
 A PCG generator with excellent statistical properties, plus the higher level
 randomness you actually reach for when drawing: weighted choices, sampling,
-shuffling, gaussians, perturbed points, and Poisson disk distributions — all
-from one seed, so the same seed always draws the same picture.
+shuffling, a shelf of distributions from gaussian to Pareto, random vectors
+and directions, perturbed points, and Poisson disk distributions — all from
+one seed, so the same seed always draws the same picture.
 
 Initially extracted from [solandra](https://github.com/jamesporter/solandra) though may diverge in future.
 
@@ -21,7 +22,8 @@ rng.number(); // 0.0327... — uniform in [0, 1)
 rng.randomAngle(); // 0.5008... — radians, 0 to 2π
 rng.sample(["red", "green", "blue"]); // "green"
 rng.gaussian({ mean: 10, sd: 2 }); // 9.0601...
-rng.poissonDiskPoints({ minDist: 0.05 }); // 266 evenly-spread points
+rng.onUnitCircle(); // [0.3717..., 0.9284...] — a random direction
+rng.poissonDiskPoints({ minDist: 0.05 }); // 271 evenly-spread points
 ```
 
 ## Install
@@ -68,9 +70,55 @@ rng.setState(state); // Rewind exactly
 rng.uniformRandomInt({ to: 6 }); // 0 to 6, inclusive
 rng.uniformRandomInt({ from: 1, to: 7, inclusive: false }); // 1 to 6
 rng.randomPolarity(); // 1 or -1
-rng.gaussian(); // Standard normal
-rng.gaussian({ mean: 100, sd: 15 });
-rng.poisson(3); // Count with mean and variance 3
+rng.bernoulli(0.3); // true 30% of the time
+```
+
+## Distributions
+
+The continuous ones:
+
+| Method                           |                                                      |
+| -------------------------------- | ---------------------------------------------------- |
+| `gaussian({ mean, sd })`         | Normal; the default is standard normal               |
+| `logNormal({ mu, sigma })`       | Positive and right skewed; good for sizes            |
+| `exponential({ rate })`          | Waiting time between events, mean `1 / rate`         |
+| `laplace({ mean, scale })`       | A sharp peak with fatter tails than a gaussian       |
+| `cauchy({ median, scale })`      | Heavy tailed enough to have no mean at all           |
+| `pareto({ shape, scale })`       | A power law: at least `scale`, occasionally enormous |
+| `weibull({ shape, scale })`      | Exponential at `shape` 1, a hump above it            |
+| `triangular({ min, max, mode })` | Bounded, peaking at `mode`                           |
+| `gamma({ shape, scale })`        | Positive, mean `shape * scale`                       |
+| `beta({ alpha, beta })`          | A proportion in `[0, 1]`                             |
+| `chiSquared(df)`                 | Sum of `df` squared normals                          |
+| `studentT(df)`                   | A gaussian with heavier tails                        |
+
+And the discrete ones:
+
+| Method                 |                                         |
+| ---------------------- | --------------------------------------- |
+| `bernoulli(p)`         | `true` with probability `p`             |
+| `binomial({ n, p })`   | How many of `n` trials succeed          |
+| `geometric(p)`         | Failures before the first success       |
+| `poisson(lambda)`      | A count with mean and variance `lambda` |
+| `categorical(weights)` | An index, in proportion to the weights  |
+
+```ts
+rng.gaussian({ mean: 100, sd: 15 }); // 103.39...
+rng.logNormal({ sigma: 0.4 }); // 1.08... — mostly small, sometimes large
+rng.beta({ alpha: 2, beta: 5 }); // 0.38... — usually a smallish fraction
+rng.poisson(3); // 1
+rng.binomial({ n: 10, p: 0.5 }); // 3
+rng.categorical([5, 3, 2]); // 0 half the time, 1 a third, 2 a fifth
+```
+
+Every one of these is exported as a standalone function too, taking any source
+of uniform randomness as its first argument:
+
+```ts
+import { gamma, weibull } from "ulam-prng";
+
+gamma(Math.random, { shape: 2, scale: 0.5 });
+weibull(rng.random, { shape: 8 });
 ```
 
 ## Points
@@ -83,6 +131,47 @@ rng.perturb({ at: [0.5, 0.5] }); // Nudge by ±0.05 on each axis
 rng.perturb({ at: [0.5, 0.5], magnitude: 1 }); // Nudge by ±0.5
 ```
 
+## Vectors
+
+`Vec2`, `Vec3` and `Vec4` are plain tuples — `[number, number]` and friends —
+so they drop straight into whatever you already use for geometry. `Point2D`
+is an alias of `Vec2`.
+
+```ts
+import type { Vec2, Vec3, Vec4 } from "ulam-prng";
+
+rng.uniformVec2(); // In the unit square
+rng.uniformVec3({ from: -1, to: 1 }); // In a cube around the origin
+rng.uniformVec4(); // Four independent components
+
+rng.gaussianVec2({ mean: [0.5, 0.5], sd: 0.1 }); // A round blur
+rng.gaussianVec3({ sd: 2 }); // A spherical one
+rng.gaussianVec4();
+
+rng.perturbVec3({ at: [0.5, 0.5, 0.5], magnitude: 0.2 });
+```
+
+Directions and interiors, sampled evenly — not by normalising a point from a
+square (which favours the diagonals), and not by latitude and longitude (which
+crowds the poles):
+
+```ts
+rng.onUnitCircle(); // A direction: [0.9789..., 0.2042...]
+rng.inUnitDisc({ radius: 3 }); // Uniform by area, so no clump in the middle
+rng.onUnitSphere(); // A direction in three dimensions
+rng.inUnitBall(); // Uniform by volume
+```
+
+These are all exported standalone as well, taking a source of randomness
+first:
+
+```ts
+import { inUnitDisc, onUnitSphere } from "ulam-prng";
+
+inUnitDisc(Math.random, { radius: 0.5 });
+onUnitSphere(rng.random);
+```
+
 ## Collections
 
 ```ts
@@ -90,6 +179,12 @@ rng.sample(items); // One element — throws on an empty array
 rng.samples(5, items); // Five, with replacement
 rng.shuffle(items); // Fisher-Yates, in place
 rng.shuffled(items); // A shuffled copy, original untouched
+
+rng.weightedSample([
+  [5, "circle"],
+  [3, "square"],
+  [2, "triangle"],
+]); // Values in proportion to their weights
 ```
 
 ## Choosing what to do
