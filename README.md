@@ -187,6 +187,38 @@ rng.weightedSample([
 ]); // Values in proportion to their weights
 ```
 
+### Without replacement
+
+These draw from the collection you hand them and **take what they draw out of
+it**, so that collection is the record of what is left — the way `shuffle`
+works in place. Pass a copy if you want to keep the original:
+
+```ts
+const deck = [1, 2, 3, 4, 5, 6];
+
+rng.sampleWithoutReplacement(deck); // One element, now gone from deck
+rng.samplesWithoutReplacement(2, deck); // Two more, all distinct; three left
+rng.samplesWithoutReplacement(3, [...deck]); // Leaves deck alone
+```
+
+The `WithCounts` pair is the same idea over `[count, value]` pairs: the
+without replacement counterpart of `weightedSample`. Counts say how many of
+each thing there are, so unlike weights they must be non-negative integers,
+and every draw decrements the count it came from:
+
+```ts
+const bag: [number, string][] = [
+  [3, "circle"],
+  [2, "square"],
+  [1, "triangle"],
+];
+
+rng.sampleWithoutReplacementWithCounts(bag); // "square", so bag is now [[3, "circle"], [1, "square"], [1, "triangle"]]
+rng.samplesWithoutReplacementWithCounts(5, bag); // The other five, in a random order
+```
+
+Both throw if you ask for more than is left.
+
 ## Choosing what to do
 
 `doProportion` runs something a fraction of the time, and returns whether it
