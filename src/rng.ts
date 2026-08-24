@@ -9,6 +9,7 @@
  */
 
 import * as dist from "./distributions.js";
+import { hashSeed } from "./hash.js";
 import {
   add64,
   BIT_27,
@@ -63,6 +64,9 @@ const totalOfCounts = <T>(cases: [number, T][]): number => {
  */
 export class RNG {
   private state: Int32Array;
+  /** The seed words this generator was last seeded with; what streams branch from. */
+  private seedHi = 0;
+  private seedLo = 0;
 
   /**
    * A uniform random number in `[0, 1)`.
@@ -80,7 +84,11 @@ export class RNG {
   /**
    * Creates a new PCG random number generator.
    *
-   * @param seedHi - High 32 bits of the seed (optional, defaults to random)
+   * A string seed is hashed down to 64 bits, so any word will do: the same
+   * word always gives the same sketch.
+   *
+   * @param seed - The seed: a string, or the high 32 bits of a numeric seed
+   * (optional, defaults to random). Ignores `seedLo` when a string.
    * @param seedLo - Low 32 bits of the seed (optional)
    * @param incHi - High 32 bits of the increment (optional, use default for best results)
    * @param incLo - Low 32 bits of the increment (optional, use default for best results)
@@ -88,17 +96,18 @@ export class RNG {
    * ```ts
    * const rng1 = new RNG() // Random seed
    * const rng2 = new RNG(42) // Seeded with 42
-   * const rng3 = new RNG(0x12345678, 0x9abcdef0) // Full 64-bit seed
+   * const rng3 = new RNG("sunflower") // Seeded with a string
+   * const rng4 = new RNG(0x12345678, 0x9abcdef0) // Full 64-bit seed
    * ```
    */
   constructor(
-    seedHi?: number,
+    seed?: number | string,
     seedLo?: number,
     incHi: number = DEFAULT_INC_HI,
     incLo: number = DEFAULT_INC_LO,
   ) {
     this.state = new Int32Array(4);
-    this.seed(seedHi, seedLo, incHi, incLo);
+    this.seed(seed, seedLo, incHi, incLo);
   }
 
   /**
@@ -106,17 +115,19 @@ export class RNG {
    * stream. Equivalent to constructing a fresh `RNG` with the same arguments,
    * but keeps any references to this instance valid.
    *
-   * @param seedHi - High 32 bits of the seed (optional, defaults to random)
+   * @param seed - The seed: a string, or the high 32 bits of a numeric seed
+   * (optional, defaults to random). Ignores `seedLo` when a string.
    * @param seedLo - Low 32 bits of the seed (optional)
    * @param incHi - High 32 bits of the increment (optional)
    * @param incLo - Low 32 bits of the increment (optional)
    * @example
    * ```ts
    * rng.seed(42) // Back to a known starting point
+   * rng.seed("sunflower") // Or a memorable one
    * ```
    */
   seed(
-    seedHi?: number,
+    seed?: number | string,
     seedLo?: number,
     incHi: number = DEFAULT_INC_HI,
     incLo: number = DEFAULT_INC_LO,
@@ -124,16 +135,21 @@ export class RNG {
     let hi: number;
     let lo: number;
 
-    if (seedLo === undefined && seedHi === undefined) {
+    if (typeof seed === "string") {
+      [hi, lo] = hashSeed(seed);
+    } else if (seedLo === undefined && seed === undefined) {
       lo = (Math.random() * 0xffffffff) >>> 0;
       hi = 0;
     } else if (seedLo === undefined) {
-      lo = seedHi as number;
+      lo = seed as number;
       hi = 0;
     } else {
       lo = seedLo;
-      hi = seedHi as number;
+      hi = seed as number;
     }
+
+    this.seedHi = hi >>> 0;
+    this.seedLo = lo >>> 0;
 
     this.state[0] = 0;
     this.state[1] = 0;
@@ -179,6 +195,80 @@ export class RNG {
     this.state[1] = state[1];
     this.state[2] = state[2];
     this.state[3] = state[3] | 1;
+  }
+
+  /**
+   * A named generator derived from this one's seed: an independent sequence
+   * that never lines up with this one, or with any other name's.
+   *
+   * Unlike {@link RNG.fork}, this depends only on the seed and the `id`, not on
+   * how far along this generator happens to be. So the layer you ask for is the
+   * same layer however much drawing came before it, and adding a stream to a
+   * sketch leaves the others exactly as they were.
+   *
+   * Streams nest: a stream of a stream is derived from that stream's seed, so
+   * `rng.stream("petals").stream("colour")` is its own generator, unrelated to
+   * `rng.stream("colour")`.
+   *
+   * A numeric `id` is hashed as its decimal string, so `stream(5)` and
+   * `stream("5")` are the same stream.
+   *
+   * @param id - Names the stream; anything, as long as it is the same next time
+   * @example
+   * ```ts
+   * const rng = new RNG("sunflower")
+   * const colour = rng.stream("colour")
+   * const layout = rng.stream("layout")
+   * // Recolouring now leaves the layout exactly where it was
+   * ```
+   */
+  stream(id: number | string): RNG {
+    const [incHi, incLo] = hashSeed(typeof id === "string" ? id : String(id));
+    // Draw the child's own seed from a generator on the named stream of this
+    // seed, so that the child differs from its parent in seed as well as
+    // stream, and streams of streams stay distinct.
+    return new RNG(this.seedHi, this.seedLo, incHi, incLo | 1).fork();
+  }
+
+  /**
+   * A new generator seeded from this one, advancing it by four draws.
+   *
+   * The child is independent — a different seed and a different stream — so
+   * however much randomness it goes on to use, this generator's own sequence is
+   * unaffected. That is what makes it safe to hand one to a subroutine whose
+   * appetite for random numbers you do not control.
+   *
+   * The whole thing stays reproducible: the same parent seed gives the same
+   * children, in order.
+   *
+   * @example
+   * ```ts
+   * const rng = new RNG("sunflower")
+   * for (const petal of petals) drawPetal(petal, rng.fork())
+   * ```
+   */
+  fork(): RNG {
+    const seedHi = this.next();
+    const seedLo = this.next();
+    const incHi = this.next();
+    const incLo = this.next() | 1;
+    return new RNG(seedHi, seedLo, incHi, incLo);
+  }
+
+  /**
+   * `n` independent generators, by {@link RNG.fork}ing this one `n` times.
+   *
+   * @throws Error if `n` is not a non-negative integer
+   * @example
+   * ```ts
+   * const [background, foreground] = rng.split(2)
+   * ```
+   */
+  split(n: number): RNG[] {
+    if (!Number.isInteger(n) || n < 0) throw new Error("n must be a non-negative integer");
+    const res: RNG[] = [];
+    for (let i = 0; i < n; i++) res.push(this.fork());
+    return res;
   }
 
   /**

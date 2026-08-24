@@ -6,7 +6,9 @@ A PCG generator with excellent statistical properties, plus the higher level
 randomness you actually reach for when drawing: weighted choices, sampling,
 shuffling, a shelf of distributions from gaussian to Pareto, random vectors
 and directions, perturbed points, and Poisson disk distributions — all from
-one seed, so the same seed always draws the same picture.
+one seed, so the same seed always draws the same picture. Seed it with a
+string, and split it into independent streams so the parts of a sketch stop
+disturbing each other.
 
 Initially extracted from [solandra](https://github.com/jamesporter/solandra) though may diverge in future.
 
@@ -42,10 +44,24 @@ twice. Leave it out and it seeds itself from `Math.random()`.
 ```ts
 new RNG(); // Different every run
 new RNG(42); // Reproducible
+new RNG("sunflower"); // Any string will do
 new RNG(0x12345678, 0x9abcdef0); // Full 64-bit seed
 ```
 
-You can move a generator around its stream after construction:
+A string seed is hashed down to 64 bits, so a sketch can be named rather than
+numbered — and the same name always draws the same picture. The hash is
+exported if you want the words themselves:
+
+```ts
+import { hashSeed } from "ulam-prng";
+
+hashSeed("sunflower"); // [98175459, 3357136283]
+```
+
+It is well mixed, so near neighbours are not: `"tree"` and `"tres"` give
+unrelated seeds, and unrelated pictures.
+
+You can move a generator around its sequence after construction:
 
 ```ts
 rng.seed(42); // Re-seed in place, keeping references valid
@@ -54,6 +70,45 @@ const state = rng.getState(); // [number, number, number, number]
 rng.number();
 rng.setState(state); // Rewind exactly
 ```
+
+## Streams
+
+One seed, several independent generators. The point is that randomness drawn
+in one place stops disturbing randomness drawn in another: change how many
+petals you draw, and the palette stays exactly where it was.
+
+`stream(id)` gives a named generator derived from the seed. It depends only on
+the seed and the name — not on how far along the parent happens to be — so the
+layer you ask for is the same layer however much drawing came before it:
+
+```ts
+const rng = new RNG("sunflower");
+
+const layout = rng.stream("layout");
+const colour = rng.stream("colour");
+const texture = rng.stream("texture"); // Adding this moves neither of the others
+```
+
+Streams nest, so a component handed `layout` can name streams of its own
+without colliding with anything above it:
+
+```ts
+layout.stream("colour"); // Its own generator, unrelated to rng.stream("colour")
+```
+
+`fork()` takes a fresh generator out of this one, advancing it by four draws.
+Because the child has its own seed and its own stream, it can draw as much as
+it likes without shifting the parent's sequence — which is what makes it safe
+to hand one to something whose appetite for random numbers you do not control:
+
+```ts
+for (const petal of petals) drawPetal(petal, rng.fork()); // Each petal, reproducibly
+
+const [background, foreground] = rng.split(2); // n forks at once
+```
+
+Reach for `stream` when the parts of a sketch have names, and `fork` when
+there are simply a lot of them.
 
 ## The core
 

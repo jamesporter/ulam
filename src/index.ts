@@ -4,6 +4,7 @@
  */
 
 export { RNG } from "./rng.js";
+export { hashSeed } from "./hash.js";
 export type { RNGState } from "./rng.js";
 export { poissonDiskPoints, PoissonDiskSampling } from "./poissonDisk.js";
 export {
