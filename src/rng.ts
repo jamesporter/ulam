@@ -8,6 +8,7 @@
  * @module rng
  */
 
+import * as dist from "./distributions.js";
 import {
   add64,
   BIT_27,
@@ -19,7 +20,8 @@ import {
   MUL_LO,
 } from "./pcg.js";
 import { poissonDiskPoints } from "./poissonDisk.js";
-import type { Point2D } from "./types.js";
+import type { Point2D, Vec2, Vec3, Vec4 } from "./types.js";
+import * as vectors from "./vectors.js";
 
 /**
  * The four 32-bit words that fully describe a generator's position in its
@@ -385,11 +387,7 @@ export class RNG {
    * perturbations of -0.5 to 0.5.
    */
   perturb(config: { at: Point2D; magnitude?: number }): Point2D {
-    const {
-      at: [x, y],
-      magnitude = 0.1,
-    } = config;
-    return [x + magnitude * (this.number() - 0.5), y + magnitude * (this.number() - 0.5)];
+    return vectors.perturbVec2(this.random, config);
   }
 
   /**
@@ -402,12 +400,7 @@ export class RNG {
    * ```
    */
   gaussian(config?: { mean?: number; sd?: number }): number {
-    const { mean = 0, sd = 1 } = config ?? {};
-    // number() is in [0, 1) so use 1 - a to keep the log argument in (0, 1]
-    const a = this.number();
-    const b = this.number();
-    const n = Math.sqrt(-2.0 * Math.log(1 - a)) * Math.cos(2.0 * Math.PI * b);
-    return mean + n * sd;
+    return dist.gaussian(this.random, config);
   }
 
   /**
@@ -420,14 +413,7 @@ export class RNG {
    * ```
    */
   poisson(lambda: number): number {
-    const limit = Math.exp(-lambda);
-    let prod = this.number();
-    let n = 0;
-    while (prod >= limit) {
-      n++;
-      prod *= this.number();
-    }
-    return n;
+    return dist.poisson(this.random, lambda);
   }
 
   /**
@@ -563,5 +549,327 @@ export class RNG {
     callback: (at: Point2D, i: number) => void,
   ): void {
     this.poissonDiskPoints(config).forEach(callback);
+  }
+
+  /**
+   * A weighted coin toss: `true` with probability `p`, which defaults to a
+   * fair half.
+   *
+   * @example
+   * ```ts
+   * if (rng.bernoulli(0.3)) addHighlight()
+   * ```
+   */
+  bernoulli(p = 0.5): boolean {
+    return dist.bernoulli(this.random, p);
+  }
+
+  /**
+   * Exponential random number: the waiting time until the next event when they
+   * arrive at `rate` per unit, so with mean `1 / rate`.
+   *
+   * @throws Error if the rate is not positive
+   * @example
+   * ```ts
+   * rng.exponential() // Mean 1
+   * rng.exponential({ rate: 4 }) // Mean 0.25
+   * ```
+   */
+  exponential(config?: { rate?: number }): number {
+    return dist.exponential(this.random, config);
+  }
+
+  /**
+   * Log-normal random number: `exp` of a gaussian, so always positive and
+   * skewed to the right. `mu` and `sigma` describe the underlying gaussian,
+   * not the values themselves.
+   *
+   * Good for sizes: mostly small things, occasionally a very large one.
+   *
+   * @example
+   * ```ts
+   * rng.logNormal({ mu: 0, sigma: 0.5 })
+   * ```
+   */
+  logNormal(config?: { mu?: number; sigma?: number }): number {
+    return dist.logNormal(this.random, config);
+  }
+
+  /**
+   * Cauchy random number: bell shaped but very heavy tailed, with no mean and
+   * no variance. Wild outliers are the point.
+   *
+   * @throws Error if the scale is not positive
+   */
+  cauchy(config?: { median?: number; scale?: number }): number {
+    return dist.cauchy(this.random, config);
+  }
+
+  /**
+   * Laplace (double exponential) random number: a sharp peak at the mean with
+   * fatter tails than a gaussian.
+   *
+   * @throws Error if the scale is not positive
+   */
+  laplace(config?: { mean?: number; scale?: number }): number {
+    return dist.laplace(this.random, config);
+  }
+
+  /**
+   * Pareto random number: a power law, at least `scale` and heavy tailed above
+   * it. Smaller `shape` means a heavier tail.
+   *
+   * @throws Error if the shape or scale is not positive
+   * @example
+   * ```ts
+   * rng.pareto({ shape: 1.5 }) // Mostly near 1, occasionally huge
+   * ```
+   */
+  pareto(config: { shape: number; scale?: number }): number {
+    return dist.pareto(this.random, config);
+  }
+
+  /**
+   * Weibull random number. `shape` below 1 crowds values near zero, at 1 it is
+   * exponential, and above 1 it becomes a hump around `scale`.
+   *
+   * @throws Error if the shape or scale is not positive
+   */
+  weibull(config: { shape: number; scale?: number }): number {
+    return dist.weibull(this.random, config);
+  }
+
+  /**
+   * Triangular random number between `min` and `max`, peaking at `mode`. A
+   * cheap way to say "around here, but not exactly".
+   *
+   * @throws Error if the bounds are not ordered, or the mode falls outside them
+   * @example
+   * ```ts
+   * rng.triangular({ min: 0, max: 10, mode: 8 })
+   * ```
+   */
+  triangular(config?: { min?: number; max?: number; mode?: number }): number {
+    return dist.triangular(this.random, config);
+  }
+
+  /**
+   * Gamma random number with the given `shape` (k) and `scale` (θ), so with
+   * mean `shape * scale`.
+   *
+   * @throws Error if the shape or scale is not positive
+   * @example
+   * ```ts
+   * rng.gamma({ shape: 2, scale: 0.5 })
+   * ```
+   */
+  gamma(config: { shape: number; scale?: number }): number {
+    return dist.gamma(this.random, config);
+  }
+
+  /**
+   * Beta random number in `[0, 1]`, with mean `alpha / (alpha + beta)`. Both
+   * parameters above 1 gives a hump, both below gives a U.
+   *
+   * Handy for proportions: how much of a shape to fill, how far along an edge
+   * to put something.
+   *
+   * @throws Error if either parameter is not positive
+   * @example
+   * ```ts
+   * rng.beta({ alpha: 2, beta: 5 }) // Usually a smallish fraction
+   * ```
+   */
+  beta(config: { alpha: number; beta: number }): number {
+    return dist.beta(this.random, config);
+  }
+
+  /**
+   * Chi-squared random number with `df` degrees of freedom, so with mean `df`.
+   *
+   * @throws Error if the degrees of freedom are not positive
+   */
+  chiSquared(df: number): number {
+    return dist.chiSquared(this.random, df);
+  }
+
+  /**
+   * Student's t random number with `df` degrees of freedom: a gaussian with
+   * heavier tails, converging on one as `df` grows.
+   *
+   * @throws Error if the degrees of freedom are not positive
+   */
+  studentT(df: number): number {
+    return dist.studentT(this.random, df);
+  }
+
+  /**
+   * Binomial random number: how many of `n` independent trials succeed, each
+   * with probability `p`.
+   *
+   * @throws Error if `n` is not a non-negative integer, or `p` is outside [0, 1]
+   * @example
+   * ```ts
+   * rng.binomial({ n: 10, p: 0.5 }) // 0 to 10, usually near 5
+   * ```
+   */
+  binomial(config: { n: number; p: number }): number {
+    return dist.binomial(this.random, config);
+  }
+
+  /**
+   * Geometric random number: how many failures come before the first success,
+   * with each trial succeeding with probability `p`.
+   *
+   * @throws Error if `p` is not in (0, 1]
+   */
+  geometric(p: number): number {
+    return dist.geometric(this.random, p);
+  }
+
+  /**
+   * An index chosen in proportion to the given weights. Weights are relative,
+   * so they need not sum to anything in particular.
+   *
+   * @throws Error if the weights are empty, negative, or do not sum to
+   * something positive
+   * @example
+   * ```ts
+   * rng.categorical([5, 3, 2]) // 0 half the time, 1 a third, 2 a fifth
+   * ```
+   */
+  categorical(weights: number[]): number {
+    return dist.categorical(this.random, weights);
+  }
+
+  /**
+   * Sample a value from `[weight, value]` pairs, in proportion to the weights.
+   *
+   * The value flavoured counterpart of {@link RNG.proportionately}, which runs
+   * a function instead.
+   *
+   * @throws Error if there are no cases, or the weights do not sum to
+   * something positive
+   * @example
+   * ```ts
+   * rng.weightedSample([
+   *   [5, "circle"],
+   *   [3, "square"],
+   *   [2, "triangle"],
+   * ])
+   * ```
+   */
+  weightedSample<T>(cases: [number, T][]): T {
+    return cases[this.categorical(cases.map((c) => c[0]))][1];
+  }
+
+  /**
+   * A uniform random `[x, y]`, by default in the unit square.
+   *
+   * @example
+   * ```ts
+   * rng.uniformVec2() // In [0, 1) x [0, 1)
+   * rng.uniformVec2({ from: -1, to: 1 })
+   * ```
+   */
+  uniformVec2(config?: vectors.UniformVecConfig): Vec2 {
+    return vectors.uniformVec2(this.random, config);
+  }
+
+  /**
+   * A uniform random `[x, y, z]`, by default in the unit cube.
+   */
+  uniformVec3(config?: vectors.UniformVecConfig): Vec3 {
+    return vectors.uniformVec3(this.random, config);
+  }
+
+  /**
+   * A uniform random `[x, y, z, w]`, by default in the unit hypercube.
+   */
+  uniformVec4(config?: vectors.UniformVecConfig): Vec4 {
+    return vectors.uniformVec4(this.random, config);
+  }
+
+  /**
+   * A gaussian `[x, y]`: independent normal components, so a round blur about
+   * `mean`.
+   *
+   * @example
+   * ```ts
+   * rng.gaussianVec2({ mean: [0.5, 0.5], sd: 0.1 })
+   * ```
+   */
+  gaussianVec2(config?: vectors.GaussianVecConfig<Vec2>): Vec2 {
+    return vectors.gaussianVec2(this.random, config);
+  }
+
+  /**
+   * A gaussian `[x, y, z]`: independent normal components, so a spherical blur
+   * about `mean`.
+   */
+  gaussianVec3(config?: vectors.GaussianVecConfig<Vec3>): Vec3 {
+    return vectors.gaussianVec3(this.random, config);
+  }
+
+  /**
+   * A gaussian `[x, y, z, w]`: independent normal components about `mean`.
+   */
+  gaussianVec4(config?: vectors.GaussianVecConfig<Vec4>): Vec4 {
+    return vectors.gaussianVec4(this.random, config);
+  }
+
+  /**
+   * A uniformly random unit vector in two dimensions: a direction, with no
+   * preference for the diagonals.
+   *
+   * @example
+   * ```ts
+   * const [dx, dy] = rng.onUnitCircle()
+   * ```
+   */
+  onUnitCircle(): Vec2 {
+    return vectors.onUnitCircle(this.random);
+  }
+
+  /**
+   * A uniformly random point inside a disc, by default the unit one. Uniform
+   * by area, so points do not bunch up in the middle.
+   *
+   * @throws Error if the radius is negative
+   */
+  inUnitDisc(config?: { radius?: number }): Vec2 {
+    return vectors.inUnitDisc(this.random, config);
+  }
+
+  /**
+   * A uniformly random unit vector in three dimensions: a direction, uniform
+   * over the sphere rather than over latitude and longitude (which would crowd
+   * the poles).
+   */
+  onUnitSphere(): Vec3 {
+    return vectors.onUnitSphere(this.random);
+  }
+
+  /**
+   * A uniformly random point inside a ball, by default the unit one. Uniform
+   * by volume.
+   *
+   * @throws Error if the radius is negative
+   */
+  inUnitBall(config?: { radius?: number }): Vec3 {
+    return vectors.inUnitBall(this.random, config);
+  }
+
+  /**
+   * Perturb a three dimensional point by a random amount, the way
+   * {@link RNG.perturb} does in two dimensions.
+   *
+   * @example
+   * ```ts
+   * rng.perturbVec3({ at: [0.5, 0.5, 0.5], magnitude: 0.2 })
+   * ```
+   */
+  perturbVec3(config: { at: Vec3; magnitude?: number }): Vec3 {
+    return vectors.perturbVec3(this.random, config);
   }
 }
