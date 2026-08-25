@@ -14,6 +14,7 @@ export {
   categorical,
   cauchy,
   chiSquared,
+  dirichlet,
   exponential,
   gamma,
   gaussian,
@@ -24,8 +25,14 @@ export {
   poisson,
   studentT,
   triangular,
+  truncatedGaussian,
   weibull,
+  zipf,
 } from "./distributions.js";
+export { perlinNoise, valueNoise } from "./noise.js";
+export type { FbmConfig, NoiseField } from "./noise.js";
+export { walk } from "./walk.js";
+export type { WalkConfig } from "./walk.js";
 export {
   gaussianVec2,
   gaussianVec3,

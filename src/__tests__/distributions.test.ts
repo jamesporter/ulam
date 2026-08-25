@@ -6,6 +6,7 @@ import {
   categorical,
   cauchy,
   chiSquared,
+  dirichlet,
   exponential,
   gamma,
   gaussian,
@@ -16,12 +17,17 @@ import {
   poisson,
   studentT,
   triangular,
+  truncatedGaussian,
   weibull,
+  zipf,
 } from "../distributions.js";
 import { RNG } from "../rng.js";
 
 /** A generator seeded the same way every time, for deterministic assertions. */
 const seeded = () => new RNG(1234);
+
+/** The mean of some numbers. */
+const average = (ns: number[]) => ns.reduce((a, b) => a + b, 0) / ns.length;
 
 /** Collect n values from a generator function. */
 function collect<T>(n: number, fn: () => T): T[] {
@@ -554,5 +560,274 @@ describe("weightedSample", () => {
 
   it("rejects an empty set of cases", () => {
     expect(() => seeded().weightedSample([])).toThrow();
+  });
+});
+
+describe("dirichlet", () => {
+  it("gives one share per concentration, summing to one", () => {
+    const rng = seeded();
+    for (let i = 0; i < 200; i++) {
+      const shares = rng.dirichlet([1, 2, 3, 4]);
+      expect(shares).toHaveLength(4);
+      expect(shares.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 12);
+      for (const share of shares) {
+        expect(share).toBeGreaterThanOrEqual(0);
+        expect(share).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it("has means in proportion to the concentrations", () => {
+    const rng = seeded();
+    const totals = [0, 0, 0];
+    const n = 20000;
+    for (let i = 0; i < n; i++) {
+      const shares = rng.dirichlet([1, 2, 3]);
+      for (let j = 0; j < 3; j++) totals[j] += shares[j] / n;
+    }
+    expect(totals[0]).toBeCloseTo(1 / 6, 2);
+    expect(totals[1]).toBeCloseTo(2 / 6, 2);
+    expect(totals[2]).toBeCloseTo(3 / 6, 2);
+  });
+
+  it("spreads the shares evenly with high concentrations, and unevenly with low", () => {
+    const rng = seeded();
+    const spread = (alpha: number[]) => {
+      let total = 0;
+      for (let i = 0; i < 2000; i++) {
+        const shares = rng.dirichlet(alpha);
+        total += Math.max(...shares) / 2000;
+      }
+      return total;
+    };
+    // With low concentrations one share tends to take nearly everything
+    expect(spread([0.1, 0.1, 0.1])).toBeGreaterThan(0.85);
+    expect(spread([50, 50, 50])).toBeLessThan(0.45);
+  });
+
+  it("always gives the whole thing to a single share", () => {
+    expect(seeded().dirichlet([2])).toEqual([1]);
+  });
+
+  it("is uniform over the simplex when every concentration is one", () => {
+    const rng = seeded();
+    const buckets = [0, 0, 0, 0, 0];
+    const n = 50000;
+    for (let i = 0; i < n; i++) {
+      buckets[Math.min(4, Math.floor(rng.dirichlet([1, 1])[0] * 5))]++;
+    }
+    for (const bucket of buckets) expect(bucket / n).toBeCloseTo(0.2, 2);
+  });
+
+  it("rejects empty or non-positive concentrations", () => {
+    expect(() => seeded().dirichlet([])).toThrow();
+    expect(() => seeded().dirichlet([1, 0])).toThrow();
+    expect(() => seeded().dirichlet([-1])).toThrow();
+  });
+
+  it("matches a direct call", () => {
+    const a = seeded();
+    const b = seeded();
+    expect(collect(10, () => a.dirichlet([1, 2, 3]))).toEqual(
+      collect(10, () => dirichlet(b.random, [1, 2, 3])),
+    );
+  });
+});
+
+/** The exact probability of each Zipf rank, for comparison. */
+function exactZipf(n: number, exponent: number): number[] {
+  let total = 0;
+  for (let k = 1; k <= n; k++) total += k ** -exponent;
+  const p = [0];
+  for (let k = 1; k <= n; k++) p.push(k ** -exponent / total);
+  return p;
+}
+
+describe("zipf", () => {
+  /** How often each rank came up, over many draws. */
+  const frequencies = (n: number, exponent: number, draws = 100000) => {
+    const rng = seeded();
+    const counts: number[] = Array.from({ length: n + 1 }, () => 0);
+    for (let i = 0; i < draws; i++) counts[zipf(rng.random, { n, exponent })]++;
+    return counts.map((c) => c / draws);
+  };
+
+  it("stays within its ranks", () => {
+    const rng = seeded();
+    for (let i = 0; i < 5000; i++) {
+      const k = rng.zipf({ n: 10 });
+      expect(Number.isInteger(k)).toBe(true);
+      expect(k).toBeGreaterThanOrEqual(1);
+      expect(k).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it("matches the exact distribution", () => {
+    for (const [n, exponent] of [
+      [10, 1],
+      [5, 2],
+      [20, 0.7],
+      [3, 1.5],
+    ] as const) {
+      const observed = frequencies(n, exponent);
+      const expected = exactZipf(n, exponent);
+      for (let k = 1; k <= n; k++) {
+        expect(observed[k]).toBeCloseTo(expected[k], 2);
+      }
+    }
+  });
+
+  it("falls away faster with a bigger exponent", () => {
+    const gentle = frequencies(20, 0.5, 20000)[1];
+    const steep = frequencies(20, 2, 20000)[1];
+    expect(steep).toBeGreaterThan(gentle);
+  });
+
+  it("puts the ranks in order", () => {
+    const observed = frequencies(8, 1.2, 50000);
+    for (let k = 2; k <= 8; k++) expect(observed[k]).toBeLessThan(observed[k - 1]);
+  });
+
+  it("is uniform in the limit of a zero exponent", () => {
+    const observed = frequencies(4, 0.0001, 40000);
+    for (let k = 1; k <= 4; k++) expect(observed[k]).toBeCloseTo(0.25, 2);
+  });
+
+  it("copes with a large number of ranks", () => {
+    const rng = seeded();
+    let max = 0;
+    for (let i = 0; i < 20000; i++) {
+      const k = rng.zipf({ n: 1_000_000, exponent: 1.05 });
+      expect(k).toBeGreaterThanOrEqual(1);
+      expect(k).toBeLessThanOrEqual(1_000_000);
+      max = Math.max(max, k);
+    }
+    // The tail is long: over this many draws it should reach well past the top few
+    expect(max).toBeGreaterThan(1000);
+  });
+
+  it("always returns the only rank there is", () => {
+    expect(collect(10, () => seeded().zipf({ n: 1 }))).toEqual(Array.from({ length: 10 }, () => 1));
+  });
+
+  it("rejects impossible parameters", () => {
+    expect(() => seeded().zipf({ n: 0 })).toThrow();
+    expect(() => seeded().zipf({ n: -3 })).toThrow();
+    expect(() => seeded().zipf({ n: 2.5 })).toThrow();
+    expect(() => seeded().zipf({ n: 10, exponent: 0 })).toThrow();
+    expect(() => seeded().zipf({ n: 10, exponent: -1 })).toThrow();
+  });
+
+  it("matches a direct call", () => {
+    const a = seeded();
+    const b = seeded();
+    expect(collect(20, () => a.zipf({ n: 50 }))).toEqual(
+      collect(20, () => zipf(b.random, { n: 50 })),
+    );
+  });
+});
+
+describe("truncatedGaussian", () => {
+  it("stays inside its bounds", () => {
+    const rng = seeded();
+    for (let i = 0; i < 5000; i++) {
+      const v = rng.truncatedGaussian({ mean: 0.5, sd: 0.3, min: 0, max: 1 });
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("keeps the shape of the bell rather than piling up on the ends", () => {
+    const rng = seeded();
+    const buckets = [0, 0, 0, 0];
+    const n = 40000;
+    for (let i = 0; i < n; i++) {
+      const v = rng.truncatedGaussian({ mean: 0, sd: 1, min: -2, max: 2 });
+      buckets[Math.min(3, Math.floor((v + 2) / 1))]++;
+    }
+    // The middle two quarters hold far more than the outer two, and nothing
+    // has been dumped on the boundaries
+    expect(buckets[1] / n).toBeGreaterThan(0.3);
+    expect(buckets[2] / n).toBeGreaterThan(0.3);
+    expect(buckets[0] / n).toBeLessThan(0.2);
+    expect(buckets[3] / n).toBeLessThan(0.2);
+  });
+
+  it("has the mean and variance of the truncated normal", () => {
+    const rng = seeded();
+    let total = 0;
+    let square = 0;
+    const n = 40000;
+    for (let i = 0; i < n; i++) {
+      const v = rng.truncatedGaussian({ min: -1, max: 1 });
+      total += v;
+      square += v * v;
+    }
+    const m = total / n;
+    expect(m).toBeCloseTo(0, 1);
+    // Var of a standard normal truncated to [-1, 1]
+    expect(square / n - m * m).toBeCloseTo(0.2916, 1);
+  });
+
+  it("gives a half normal with only a lower bound", () => {
+    const rng = seeded();
+    let total = 0;
+    const n = 40000;
+    for (let i = 0; i < n; i++) {
+      const v = rng.truncatedGaussian({ min: 0 });
+      expect(v).toBeGreaterThanOrEqual(0);
+      total += v;
+    }
+    expect(total / n).toBeCloseTo(Math.sqrt(2 / Math.PI), 1);
+  });
+
+  it("works far out in the tail, where rejection sampling would never finish", () => {
+    const rng = seeded();
+    let total = 0;
+    const n = 20000;
+    for (let i = 0; i < n; i++) {
+      const v = rng.truncatedGaussian({ min: 5, max: 6 });
+      expect(v).toBeGreaterThanOrEqual(5);
+      expect(v).toBeLessThanOrEqual(6);
+      total += v;
+    }
+    // The mean of a standard normal on [5, 6] sits just inside the near end
+    expect(total / n).toBeCloseTo(5.186, 1);
+  });
+
+  it("costs exactly one draw a time", () => {
+    const rng = seeded();
+    const before = rng.getState();
+    rng.truncatedGaussian({ min: 2, max: 2.001 });
+    const after = rng.getState();
+    const counting = seeded();
+    counting.number();
+    expect(after).toEqual(counting.getState());
+    expect(before).not.toEqual(after);
+  });
+
+  it("is an ordinary gaussian with no bounds at all", () => {
+    const a = seeded();
+    const b = seeded();
+    const bounded = collect(2000, () => a.truncatedGaussian({ mean: 2, sd: 3 }));
+    const plain = collect(2000, () => b.gaussian({ mean: 2, sd: 3 }));
+    expect(average(bounded)).toBeCloseTo(average(plain), 0);
+  });
+
+  it("rejects impossible bounds", () => {
+    expect(() => seeded().truncatedGaussian({ sd: 0 })).toThrow();
+    expect(() => seeded().truncatedGaussian({ sd: -1 })).toThrow();
+    expect(() => seeded().truncatedGaussian({ min: 1, max: 1 })).toThrow();
+    expect(() => seeded().truncatedGaussian({ min: 2, max: 1 })).toThrow();
+    expect(() => seeded().truncatedGaussian({ min: 50, max: 60 })).toThrow();
+  });
+
+  it("matches a direct call", () => {
+    const a = seeded();
+    const b = seeded();
+    const config = { mean: 1, sd: 2, min: 0, max: 3 };
+    expect(collect(20, () => a.truncatedGaussian(config))).toEqual(
+      collect(20, () => truncatedGaussian(b.random, config)),
+    );
   });
 });
