@@ -5,8 +5,10 @@ Seeded random number generation for generative art.
 A PCG generator with excellent statistical properties, plus the higher level
 randomness you actually reach for when drawing: weighted choices, sampling,
 shuffling, a shelf of distributions from gaussian to Pareto, random vectors
-and directions, perturbed points, and Poisson disk distributions — all from
-one seed, so the same seed always draws the same picture.
+and directions, perturbed points, Poisson disk distributions, coherent noise
+and random walks — all from one seed, so the same seed always draws the same
+picture. Seed it with a string, split it into independent streams so the parts
+of a sketch stop disturbing each other, and save its exact position in a URL.
 
 Initially extracted from [solandra](https://github.com/jamesporter/solandra) though may diverge in future.
 
@@ -37,15 +39,31 @@ TypeScript types are included. ESM only.
 ## Seeding
 
 `RNG` takes a seed; give it the same one twice and you get the same sequence
-twice. Leave it out and it seeds itself from `Math.random()`.
+twice. Leave it out and it seeds itself with a full 64 bits from the platform's
+cryptographic generator, falling back to `Math.random()` where there is not
+one.
 
 ```ts
 new RNG(); // Different every run
 new RNG(42); // Reproducible
+new RNG("sunflower"); // Any string will do
 new RNG(0x12345678, 0x9abcdef0); // Full 64-bit seed
 ```
 
-You can move a generator around its stream after construction:
+A string seed is hashed down to 64 bits, so a sketch can be named rather than
+numbered — and the same name always draws the same picture. The hash is
+exported if you want the words themselves:
+
+```ts
+import { hashSeed } from "ulam-prng";
+
+hashSeed("sunflower"); // [98175459, 3357136283]
+```
+
+It is well mixed, so near neighbours are not: `"tree"` and `"tres"` give
+unrelated seeds, and unrelated pictures.
+
+You can move a generator around its sequence after construction:
 
 ```ts
 rng.seed(42); // Re-seed in place, keeping references valid
@@ -54,6 +72,61 @@ const state = rng.getState(); // [number, number, number, number]
 rng.number();
 rng.setState(state); // Rewind exactly
 ```
+
+## Streams
+
+One seed, several independent generators. The point is that randomness drawn
+in one place stops disturbing randomness drawn in another: change how many
+petals you draw, and the palette stays exactly where it was.
+
+`stream(id)` gives a named generator derived from the seed. It depends only on
+the seed and the name — not on how far along the parent happens to be — so the
+layer you ask for is the same layer however much drawing came before it:
+
+```ts
+const rng = new RNG("sunflower");
+
+const layout = rng.stream("layout");
+const colour = rng.stream("colour");
+const texture = rng.stream("texture"); // Adding this moves neither of the others
+```
+
+Streams nest, so a component handed `layout` can name streams of its own
+without colliding with anything above it:
+
+```ts
+layout.stream("colour"); // Its own generator, unrelated to rng.stream("colour")
+```
+
+`fork()` takes a fresh generator out of this one, advancing it by four draws.
+Because the child has its own seed and its own stream, it can draw as much as
+it likes without shifting the parent's sequence — which is what makes it safe
+to hand one to something whose appetite for random numbers you do not control:
+
+```ts
+for (const petal of petals) drawPetal(petal, rng.fork()); // Each petal, reproducibly
+
+const [background, foreground] = rng.split(2); // n forks at once
+```
+
+Reach for `stream` when the parts of a sketch have names, and `fork` when
+there are simply a lot of them.
+
+## Saving where you are
+
+A generator serialises to a 32 character URL safe string carrying its seed and
+its exact position in the stream, so a picture can be saved, linked to, or
+picked up again later:
+
+```ts
+location.hash = rng.toJSON(); // "BdoJ48gZ1ZtXbRYS2XPecRQFe373Z4FP"
+
+const restored = RNG.fromJSON(location.hash.slice(1)); // Carries on where it left off
+```
+
+It is called `toJSON` so `JSON.stringify` finds it on its own, wherever a
+generator sits inside something larger being saved. Streams come back with it:
+a restored generator's `stream("colour")` is the one it always was.
 
 ## The core
 
@@ -77,30 +150,33 @@ rng.bernoulli(0.3); // true 30% of the time
 
 The continuous ones:
 
-| Method                           |                                                      |
-| -------------------------------- | ---------------------------------------------------- |
-| `gaussian({ mean, sd })`         | Normal; the default is standard normal               |
-| `logNormal({ mu, sigma })`       | Positive and right skewed; good for sizes            |
-| `exponential({ rate })`          | Waiting time between events, mean `1 / rate`         |
-| `laplace({ mean, scale })`       | A sharp peak with fatter tails than a gaussian       |
-| `cauchy({ median, scale })`      | Heavy tailed enough to have no mean at all           |
-| `pareto({ shape, scale })`       | A power law: at least `scale`, occasionally enormous |
-| `weibull({ shape, scale })`      | Exponential at `shape` 1, a hump above it            |
-| `triangular({ min, max, mode })` | Bounded, peaking at `mode`                           |
-| `gamma({ shape, scale })`        | Positive, mean `shape * scale`                       |
-| `beta({ alpha, beta })`          | A proportion in `[0, 1]`                             |
-| `chiSquared(df)`                 | Sum of `df` squared normals                          |
-| `studentT(df)`                   | A gaussian with heavier tails                        |
+| Method                            |                                                          |
+| --------------------------------- | -------------------------------------------------------- |
+| `gaussian({ mean, sd })`          | Normal; the default is standard normal                   |
+| `logNormal({ mu, sigma })`        | Positive and right skewed; good for sizes                |
+| `exponential({ rate })`           | Waiting time between events, mean `1 / rate`             |
+| `laplace({ mean, scale })`        | A sharp peak with fatter tails than a gaussian           |
+| `cauchy({ median, scale })`       | Heavy tailed enough to have no mean at all               |
+| `pareto({ shape, scale })`        | A power law: at least `scale`, occasionally enormous     |
+| `weibull({ shape, scale })`       | Exponential at `shape` 1, a hump above it                |
+| `triangular({ min, max, mode })`  | Bounded, peaking at `mode`                               |
+| `gamma({ shape, scale })`         | Positive, mean `shape * scale`                           |
+| `beta({ alpha, beta })`           | A proportion in `[0, 1]`                                 |
+| `chiSquared(df)`                  | Sum of `df` squared normals                              |
+| `studentT(df)`                    | A gaussian with heavier tails                            |
+| `truncatedGaussian({ min, max })` | Normal, confined to bounds rather than clamped to them   |
+| `dirichlet(alpha)`                | Shares of a whole, one per concentration, summing to one |
 
 And the discrete ones:
 
-| Method                 |                                         |
-| ---------------------- | --------------------------------------- |
-| `bernoulli(p)`         | `true` with probability `p`             |
-| `binomial({ n, p })`   | How many of `n` trials succeed          |
-| `geometric(p)`         | Failures before the first success       |
-| `poisson(lambda)`      | A count with mean and variance `lambda` |
-| `categorical(weights)` | An index, in proportion to the weights  |
+| Method                  |                                         |
+| ----------------------- | --------------------------------------- |
+| `bernoulli(p)`          | `true` with probability `p`             |
+| `binomial({ n, p })`    | How many of `n` trials succeed          |
+| `geometric(p)`          | Failures before the first success       |
+| `poisson(lambda)`       | A count with mean and variance `lambda` |
+| `categorical(weights)`  | An index, in proportion to the weights  |
+| `zipf({ n, exponent })` | A rank from 1 to `n`, by a power law    |
 
 ```ts
 rng.gaussian({ mean: 100, sd: 15 }); // 103.39...
@@ -109,6 +185,34 @@ rng.beta({ alpha: 2, beta: 5 }); // 0.38... — usually a smallish fraction
 rng.poisson(3); // 1
 rng.binomial({ n: 10, p: 0.5 }); // 3
 rng.categorical([5, 3, 2]); // 0 half the time, 1 a third, 2 a fifth
+```
+
+`truncatedGaussian` draws from the part of the bell inside the bounds, rather
+than drawing wide and clamping — which would pile values up on the ends. It
+costs one draw however narrow the window, so it still works far out in the
+tail, where rejecting until something lands would never finish:
+
+```ts
+rng.truncatedGaussian({ mean: 0.5, sd: 0.2, min: 0, max: 1 }); // 0.61...
+rng.truncatedGaussian({ min: 0 }); // The positive half of a standard normal
+```
+
+`dirichlet` splits one thing into random parts — an area, a palette, a budget.
+Concentrations below one usually give most of it to a single share, above one
+even the shares out:
+
+```ts
+rng.dirichlet([1, 1, 1]); // [0.17..., 0.56..., 0.27...] — sums to 1
+rng.dirichlet([8, 8, 8]); // Three near equal thirds
+```
+
+`zipf` gives a rank, where the first is the most likely, the second about half
+as likely, and the tail is long but bounded — how sizes tend to fall when they
+follow an order:
+
+```ts
+rng.zipf({ n: 100 }); // Mostly 1 and 2, occasionally far down the list
+rng.zipf({ n: 100, exponent: 2 }); // Falls away faster still
 ```
 
 Every one of these is exported as a standalone function too, taking any source
@@ -284,6 +388,65 @@ poissonDiskPoints({
   rng: () => Math.random(),
   k: 30,
 });
+```
+
+## Noise
+
+Coherent noise: a field that varies smoothly from place to place, so
+neighbouring points get related values rather than independent ones. This is
+what you want when something should drift across the canvas rather than jump —
+a height, a hue, an angle, a width.
+
+```ts
+const noise = rng.perlinNoise(); // Gradient noise, the classic
+const soft = rng.valueNoise(); // Blobbier, and cheaper
+
+noise.at(x * 4); // -1 to 1
+noise.at(x * 4, y * 4); // Two dimensions
+noise.at(x * 4, y * 4, t); // Three, the last one often time
+```
+
+Building a field draws a few hundred numbers from the generator; sampling it
+draws none. It is a fixed landscape, so the same point always gives the same
+value, and multiplying the coordinates is how you zoom in and out of it.
+
+`fbm` stacks octaves of a field — each one finer and fainter than the last —
+into another field, sampled exactly the same way, so the configuring is done
+once rather than at every point:
+
+```ts
+const hills = noise.fbm({ octaves: 6, lacunarity: 2, gain: 0.5 });
+hills.at(x, y); // Detail at every scale, still -1 to 1
+```
+
+Both are exported standalone as well, taking a source of randomness first:
+
+```ts
+import { perlinNoise, valueNoise } from "ulam-prng";
+
+perlinNoise(Math.random).at(0.5, 0.5);
+```
+
+## Random walks
+
+A path whose steps remember where the last one went.
+
+```ts
+for (const [x, y] of rng.walk({ steps: 200, stepSize: 0.01, momentum: 0.9 })) {
+  lineTo(x, y);
+}
+```
+
+`momentum` is what makes it a walk rather than a scatter: at 0 every step heads
+off independently, giving the jagged path of Brownian motion, and nearer 1 the
+line turns slowly and keeps going the way it was going. `drift` adds a constant
+nudge on top, for a current the walk is carried along by, and `heading` points
+the first step; `start` and `stepSize` do what they say. The path comes back
+one point longer than the number of steps, since it includes where it began.
+
+```ts
+rng.walk({ steps: 500, momentum: 0.97, drift: [0.5, 0] }); // A wandering current
+rng.walk({ steps: 50, heading: 0 }); // Sets off due east
 ```
 
 ## Development

@@ -8,7 +8,10 @@
  * @module rng
  */
 
+import { decodeWords, encodeWords } from "./codec.js";
 import * as dist from "./distributions.js";
+import { randomSeedWords } from "./entropy.js";
+import { hashSeed } from "./hash.js";
 import {
   add64,
   BIT_27,
@@ -19,9 +22,13 @@ import {
   MUL_HI,
   MUL_LO,
 } from "./pcg.js";
+import type { NoiseField } from "./noise.js";
+import { perlinNoise, valueNoise } from "./noise.js";
 import { poissonDiskPoints } from "./poissonDisk.js";
 import type { Point2D, Vec2, Vec3, Vec4 } from "./types.js";
 import * as vectors from "./vectors.js";
+import type { WalkConfig } from "./walk.js";
+import { walk } from "./walk.js";
 
 /**
  * The four 32-bit words that fully describe a generator's position in its
@@ -63,6 +70,9 @@ const totalOfCounts = <T>(cases: [number, T][]): number => {
  */
 export class RNG {
   private state: Int32Array;
+  /** The seed words this generator was last seeded with; what streams branch from. */
+  private seedHi = 0;
+  private seedLo = 0;
 
   /**
    * A uniform random number in `[0, 1)`.
@@ -80,7 +90,15 @@ export class RNG {
   /**
    * Creates a new PCG random number generator.
    *
-   * @param seedHi - High 32 bits of the seed (optional, defaults to random)
+   * A string seed is hashed down to 64 bits, so any word will do: the same
+   * word always gives the same sketch.
+   *
+   * Given no seed at all it takes a full 64 bits from the platform's
+   * cryptographic generator, falling back to `Math.random` where there is not
+   * one.
+   *
+   * @param seed - The seed: a string, or the high 32 bits of a numeric seed
+   * (optional, defaults to random). Ignores `seedLo` when a string.
    * @param seedLo - Low 32 bits of the seed (optional)
    * @param incHi - High 32 bits of the increment (optional, use default for best results)
    * @param incLo - Low 32 bits of the increment (optional, use default for best results)
@@ -88,17 +106,18 @@ export class RNG {
    * ```ts
    * const rng1 = new RNG() // Random seed
    * const rng2 = new RNG(42) // Seeded with 42
-   * const rng3 = new RNG(0x12345678, 0x9abcdef0) // Full 64-bit seed
+   * const rng3 = new RNG("sunflower") // Seeded with a string
+   * const rng4 = new RNG(0x12345678, 0x9abcdef0) // Full 64-bit seed
    * ```
    */
   constructor(
-    seedHi?: number,
+    seed?: number | string,
     seedLo?: number,
     incHi: number = DEFAULT_INC_HI,
     incLo: number = DEFAULT_INC_LO,
   ) {
     this.state = new Int32Array(4);
-    this.seed(seedHi, seedLo, incHi, incLo);
+    this.seed(seed, seedLo, incHi, incLo);
   }
 
   /**
@@ -106,17 +125,19 @@ export class RNG {
    * stream. Equivalent to constructing a fresh `RNG` with the same arguments,
    * but keeps any references to this instance valid.
    *
-   * @param seedHi - High 32 bits of the seed (optional, defaults to random)
+   * @param seed - The seed: a string, or the high 32 bits of a numeric seed
+   * (optional, defaults to random). Ignores `seedLo` when a string.
    * @param seedLo - Low 32 bits of the seed (optional)
    * @param incHi - High 32 bits of the increment (optional)
    * @param incLo - Low 32 bits of the increment (optional)
    * @example
    * ```ts
    * rng.seed(42) // Back to a known starting point
+   * rng.seed("sunflower") // Or a memorable one
    * ```
    */
   seed(
-    seedHi?: number,
+    seed?: number | string,
     seedLo?: number,
     incHi: number = DEFAULT_INC_HI,
     incLo: number = DEFAULT_INC_LO,
@@ -124,16 +145,20 @@ export class RNG {
     let hi: number;
     let lo: number;
 
-    if (seedLo === undefined && seedHi === undefined) {
-      lo = (Math.random() * 0xffffffff) >>> 0;
-      hi = 0;
+    if (typeof seed === "string") {
+      [hi, lo] = hashSeed(seed);
+    } else if (seedLo === undefined && seed === undefined) {
+      [hi, lo] = randomSeedWords();
     } else if (seedLo === undefined) {
-      lo = seedHi as number;
+      lo = seed as number;
       hi = 0;
     } else {
       lo = seedLo;
-      hi = seedHi as number;
+      hi = seed as number;
     }
+
+    this.seedHi = hi >>> 0;
+    this.seedLo = lo >>> 0;
 
     this.state[0] = 0;
     this.state[1] = 0;
@@ -179,6 +204,122 @@ export class RNG {
     this.state[1] = state[1];
     this.state[2] = state[2];
     this.state[3] = state[3] | 1;
+  }
+
+  /**
+   * This generator as a short URL safe string: 32 characters carrying its
+   * seed and its exact position in the stream.
+   *
+   * Named `toJSON` so that `JSON.stringify` picks it up on its own, wherever a
+   * generator sits inside something larger being saved.
+   *
+   * @see {@link RNG.fromJSON} to get the generator back
+   * @example
+   * ```ts
+   * location.hash = rng.toJSON() // Put the picture in the URL
+   * ```
+   */
+  toJSON(): string {
+    return encodeWords([
+      this.seedHi,
+      this.seedLo,
+      this.state[0],
+      this.state[1],
+      this.state[2],
+      this.state[3],
+    ]);
+  }
+
+  /**
+   * The generator a {@link RNG.toJSON} string came from: the same seed, and
+   * the same place in the same stream, so it carries on exactly where the
+   * original left off. Its {@link RNG.stream}s come back with it.
+   *
+   * @throws Error if the string is not one {@link RNG.toJSON} produced
+   * @example
+   * ```ts
+   * const rng = RNG.fromJSON(location.hash.slice(1))
+   * ```
+   */
+  static fromJSON(serialised: string): RNG {
+    const [seedHi, seedLo, ...state] = decodeWords(serialised, 6);
+    const rng = new RNG(seedHi, seedLo);
+    rng.setState([state[0], state[1], state[2], state[3]]);
+    return rng;
+  }
+
+  /**
+   * A named generator derived from this one's seed: an independent sequence
+   * that never lines up with this one, or with any other name's.
+   *
+   * Unlike {@link RNG.fork}, this depends only on the seed and the `id`, not on
+   * how far along this generator happens to be. So the layer you ask for is the
+   * same layer however much drawing came before it, and adding a stream to a
+   * sketch leaves the others exactly as they were.
+   *
+   * Streams nest: a stream of a stream is derived from that stream's seed, so
+   * `rng.stream("petals").stream("colour")` is its own generator, unrelated to
+   * `rng.stream("colour")`.
+   *
+   * A numeric `id` is hashed as its decimal string, so `stream(5)` and
+   * `stream("5")` are the same stream.
+   *
+   * @param id - Names the stream; anything, as long as it is the same next time
+   * @example
+   * ```ts
+   * const rng = new RNG("sunflower")
+   * const colour = rng.stream("colour")
+   * const layout = rng.stream("layout")
+   * // Recolouring now leaves the layout exactly where it was
+   * ```
+   */
+  stream(id: number | string): RNG {
+    const [incHi, incLo] = hashSeed(typeof id === "string" ? id : String(id));
+    // Draw the child's own seed from a generator on the named stream of this
+    // seed, so that the child differs from its parent in seed as well as
+    // stream, and streams of streams stay distinct.
+    return new RNG(this.seedHi, this.seedLo, incHi, incLo | 1).fork();
+  }
+
+  /**
+   * A new generator seeded from this one, advancing it by four draws.
+   *
+   * The child is independent — a different seed and a different stream — so
+   * however much randomness it goes on to use, this generator's own sequence is
+   * unaffected. That is what makes it safe to hand one to a subroutine whose
+   * appetite for random numbers you do not control.
+   *
+   * The whole thing stays reproducible: the same parent seed gives the same
+   * children, in order.
+   *
+   * @example
+   * ```ts
+   * const rng = new RNG("sunflower")
+   * for (const petal of petals) drawPetal(petal, rng.fork())
+   * ```
+   */
+  fork(): RNG {
+    const seedHi = this.next();
+    const seedLo = this.next();
+    const incHi = this.next();
+    const incLo = this.next() | 1;
+    return new RNG(seedHi, seedLo, incHi, incLo);
+  }
+
+  /**
+   * `n` independent generators, by {@link RNG.fork}ing this one `n` times.
+   *
+   * @throws Error if `n` is not a non-negative integer
+   * @example
+   * ```ts
+   * const [background, foreground] = rng.split(2)
+   * ```
+   */
+  split(n: number): RNG[] {
+    if (!Number.isInteger(n) || n < 0) throw new Error("n must be a non-negative integer");
+    const res: RNG[] = [];
+    for (let i = 0; i < n; i++) res.push(this.fork());
+    return res;
   }
 
   /**
@@ -801,6 +942,57 @@ export class RNG {
   }
 
   /**
+   * Dirichlet random vector: a set of proportions, each positive and all
+   * summing to one. `alpha` gives one concentration per share; equal values
+   * give shares that are all alike, values below one push the mass into a few
+   * of them, and values above one even them out.
+   *
+   * @throws Error if `alpha` is empty, or any concentration is not positive
+   * @example
+   * ```ts
+   * const [a, b, c] = rng.dirichlet([1, 1, 1]) // Three shares of a whole
+   * ```
+   */
+  dirichlet(alpha: number[]): number[] {
+    return dist.dirichlet(this.random, alpha);
+  }
+
+  /**
+   * Zipf random number: a rank from 1 to `n`, where rank `k` comes up in
+   * proportion to `k ** -exponent`. The first rank dominates, the second gets
+   * about half as much, and the tail is long but bounded.
+   *
+   * @throws Error if `n` is not a positive integer, or the exponent is not
+   * positive
+   * @example
+   * ```ts
+   * rng.zipf({ n: 100 }) // Mostly 1 and 2, occasionally far down the list
+   * ```
+   */
+  zipf(config: { n: number; exponent?: number }): number {
+    return dist.zipf(this.random, config);
+  }
+
+  /**
+   * Truncated gaussian: a normal draw confined to `[min, max]`, drawn from the
+   * part of the bell inside those bounds rather than clamped onto them.
+   *
+   * Bounds are optional either side, so `{ min: 0 }` is a positive-only
+   * normal.
+   *
+   * @throws Error if the standard deviation is not positive, if `min` is not
+   * below `max`, or if the bounds are so far out that no draw could land in
+   * them
+   * @example
+   * ```ts
+   * rng.truncatedGaussian({ mean: 0.5, sd: 0.2, min: 0, max: 1 })
+   * ```
+   */
+  truncatedGaussian(config?: { mean?: number; sd?: number; min?: number; max?: number }): number {
+    return dist.truncatedGaussian(this.random, config);
+  }
+
+  /**
    * Sample a value from `[weight, value]` pairs, in proportion to the weights.
    *
    * The value flavoured counterpart of {@link RNG.proportionately}, which runs
@@ -998,5 +1190,63 @@ export class RNG {
    */
   perturbVec3(config: { at: Vec3; magnitude?: number }): Vec3 {
     return vectors.perturbVec3(this.random, config);
+  }
+
+  /**
+   * A seeded field of value noise: a random value at every lattice point,
+   * smoothly interpolated between them, so nearby points get nearby values.
+   *
+   * Building the field draws a few hundred numbers from this generator, after
+   * which sampling it draws none — the field is a fixed landscape, and the
+   * same point always gives the same value.
+   *
+   * @example
+   * ```ts
+   * const noise = rng.valueNoise()
+   * noise.at(x * 4, y * 4) // -1 to 1, drifting across the canvas
+   * ```
+   */
+  valueNoise(): NoiseField {
+    return valueNoise(this.random);
+  }
+
+  /**
+   * A seeded field of gradient (Perlin) noise: a random direction at every
+   * lattice point, with the field falling to zero at each of them. More even,
+   * and with more structure, than {@link RNG.valueNoise}.
+   *
+   * @example
+   * ```ts
+   * const noise = rng.perlinNoise()
+   * noise.at(x * 3, y * 3) // A landscape
+   * noise.at(x * 3, y * 3, t) // The same, with the third dimension as time
+   * noise.fbm({ octaves: 6 }).at(x, y) // Detail at every scale
+   * ```
+   */
+  perlinNoise(): NoiseField {
+    return perlinNoise(this.random);
+  }
+
+  /**
+   * A random walk: a path of `steps` steps. The first goes in `heading`, or in
+   * a random direction; each one after it blends the direction of the last
+   * with a fresh random heading.
+   *
+   * `momentum` is what makes it a walk rather than a scatter — at 0 every step
+   * is independent, and nearer 1 the line turns slowly and keeps going the way
+   * it was going. `drift` adds a constant nudge on top.
+   *
+   * @returns The path, starting with `start`, so `steps + 1` points long
+   * @throws Error if the steps are not a non-negative integer, the momentum is
+   * outside `[0, 1]`, or the step size is negative
+   * @example
+   * ```ts
+   * for (const [x, y] of rng.walk({ steps: 200, stepSize: 0.01, momentum: 0.9 })) {
+   *   lineTo(x, y)
+   * }
+   * ```
+   */
+  walk(config: WalkConfig): Vec2[] {
+    return walk(this.random, config);
   }
 }

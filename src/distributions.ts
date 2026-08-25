@@ -319,3 +319,248 @@ export function categorical(rng: RandomSource, weights: number[]): number {
   // Only reachable through floating point drift at the very end of the range
   return weights.length - 1;
 }
+
+/**
+ * Dirichlet random vector: a set of proportions, each positive and all summing
+ * to one. `alpha` gives one concentration per share; equal values give shares
+ * that are all alike, values below one push the mass into a few of them, and
+ * values above one even them out.
+ *
+ * The natural way to split something — an area, a palette, a budget — into
+ * random parts.
+ *
+ * @throws Error if `alpha` is empty, or any concentration is not positive
+ * @example
+ * ```ts
+ * dirichlet(Math.random, [1, 1, 1]) // Three shares, any split equally likely
+ * dirichlet(Math.random, [0.2, 0.2, 0.2]) // Usually one share takes most of it
+ * dirichlet(Math.random, [8, 8, 8]) // Three near equal thirds
+ * ```
+ */
+export function dirichlet(rng: RandomSource, alpha: number[]): number[] {
+  if (alpha.length === 0) throw new Error("Must have at least one concentration");
+
+  const draws: number[] = [];
+  let total = 0;
+  for (const a of alpha) {
+    if (a <= 0) throw new Error("Concentrations must be positive");
+    const g = gamma(rng, { shape: a });
+    draws.push(g);
+    total += g;
+  }
+
+  // Every draw can underflow to zero for tiny concentrations; share it out
+  if (total === 0) return draws.map(() => 1 / alpha.length);
+  return draws.map((g) => g / total);
+}
+
+/**
+ * Zipf random number: a rank from 1 to `n`, where rank `k` comes up in
+ * proportion to `k ** -exponent`. The first rank dominates, the second gets
+ * about half as much, and the tail is long but bounded.
+ *
+ * How sizes tend to fall when they follow an order: city populations, word
+ * frequencies, the biggest shape on the canvas and everything after it.
+ *
+ * Sampled by rejection inversion (Hörmann and Derflinger), so cost does not
+ * grow with `n`.
+ *
+ * @param config.n - How many ranks there are; the largest value it can return
+ * @param config.exponent - How fast the ranks fall away (default: 1)
+ * @throws Error if `n` is not a positive integer, or the exponent is not positive
+ * @example
+ * ```ts
+ * zipf(Math.random, { n: 100 }) // Mostly 1 and 2, occasionally far down the list
+ * zipf(Math.random, { n: 100, exponent: 2 }) // Falls away faster still
+ * ```
+ */
+export function zipf(rng: RandomSource, config: { n: number; exponent?: number }): number {
+  const { n, exponent = 1 } = config;
+  if (!Number.isInteger(n) || n <= 0) throw new Error("n must be a positive integer");
+  if (exponent <= 0) throw new Error("exponent must be positive");
+  if (n === 1) return 1;
+
+  // H is the integral of the density k ** -exponent, so inverting it maps a
+  // uniform draw onto a rank; the rejection step corrects for the difference
+  // between the smooth curve and the steps it stands in for.
+  const hIntegral = (x: number): number => {
+    const logX = Math.log(x);
+    return expm1OverX((1 - exponent) * logX) * logX;
+  };
+  const hIntegralInverse = (x: number): number => {
+    const t = Math.max(-1, x * (1 - exponent));
+    return Math.exp(log1pOverX(t) * x);
+  };
+  const h = (x: number): number => Math.exp(-exponent * Math.log(x));
+
+  const hIntegralAtHalf = hIntegral(1.5) - 1;
+  const hIntegralAtEnd = hIntegral(n + 0.5);
+  // The widest the accepted band can be, used as a cheap first test below
+  const threshold = 2 - hIntegralInverse(hIntegral(2.5) - h(2));
+
+  for (;;) {
+    const u = hIntegralAtEnd + rng() * (hIntegralAtHalf - hIntegralAtEnd);
+    const x = hIntegralInverse(u);
+    let k = Math.floor(x + 0.5);
+    if (k < 1) k = 1;
+    else if (k > n) k = n;
+
+    if (k - x <= threshold || u >= hIntegral(k + 0.5) - h(k)) return k;
+  }
+}
+
+/**
+ * `(exp(x) - 1) / x`, computed so that it stays accurate as `x` approaches
+ * zero, where the difference of two nearly equal numbers would otherwise lose
+ * every significant digit.
+ * @internal
+ */
+function expm1OverX(x: number): number {
+  if (Math.abs(x) > 1e-8) return Math.expm1(x) / x;
+  return 1 + x * 0.5;
+}
+
+/**
+ * `log(1 + x) / x`, to the same end.
+ * @internal
+ */
+function log1pOverX(x: number): number {
+  if (Math.abs(x) > 1e-8) return Math.log1p(x) / x;
+  return 1 - x * 0.5;
+}
+
+/**
+ * Truncated gaussian: a normal draw confined to `[min, max]`, drawn from the
+ * part of the bell inside those bounds rather than clamped onto them.
+ *
+ * Clamping would pile values up on the ends; this leaves the shape intact,
+ * however narrow the window, and always costs exactly one uniform draw.
+ *
+ * Bounds are optional either side, so `{ min: 0 }` is a positive-only normal.
+ *
+ * @throws Error if the standard deviation is not positive, if `min` is not
+ * below `max`, or if the bounds are so far out that no draw could land in them
+ * @example
+ * ```ts
+ * truncatedGaussian(Math.random, { mean: 0.5, sd: 0.2, min: 0, max: 1 })
+ * truncatedGaussian(Math.random, { min: 0 }) // Standard normal, positive half
+ * ```
+ */
+export function truncatedGaussian(
+  rng: RandomSource,
+  config?: { mean?: number; sd?: number; min?: number; max?: number },
+): number {
+  const {
+    mean = 0,
+    sd = 1,
+    min = Number.NEGATIVE_INFINITY,
+    max = Number.POSITIVE_INFINITY,
+  } = config ?? {};
+  if (sd <= 0) throw new Error("sd must be positive");
+  if (!(min < max)) throw new Error("min must be below max");
+
+  const lo = normalCdf((min - mean) / sd);
+  const hi = normalCdf((max - mean) / sd);
+  if (hi <= lo) {
+    throw new Error("The bounds are too far into the tail to draw from");
+  }
+
+  const u = lo + rng() * (hi - lo);
+  const z = normalQuantile(u);
+  // Guard against a quantile that rounds a hair outside its own bounds
+  return Math.min(max, Math.max(min, mean + sd * z));
+}
+
+/**
+ * The standard normal CDF: the share of a standard normal below `x`.
+ * @internal
+ */
+function normalCdf(x: number): number {
+  if (x === Number.NEGATIVE_INFINITY) return 0;
+  if (x === Number.POSITIVE_INFINITY) return 1;
+  return 0.5 * erfc(-x / Math.SQRT2);
+}
+
+/**
+ * The complementary error function, by the Chebyshev fit of Numerical Recipes.
+ * Accurate to better than 1.2e-7 everywhere.
+ * @internal
+ */
+function erfc(x: number): number {
+  const z = Math.abs(x);
+  const t = 2 / (2 + z);
+  const ty = 4 * t - 2;
+
+  const coefficients = [
+    -1.3026537197817094, 6.419697923564902e-1, 1.9476473204185836e-2, -9.56151478680863e-3,
+    -9.46595344482036e-4, 3.66839497852761e-4, 4.2523324806907e-5, -2.0278578112534e-5,
+    -1.624290004647e-6, 1.30365583558e-6, 1.5626441722e-8, -8.5238095915e-8, 6.529054439e-9,
+    5.059343495e-9, -9.91364156e-10, -2.27365122e-10, 9.6467911e-11, 2.394038e-12, -6.886027e-12,
+    8.94487e-13, 3.13092e-13, -1.12708e-13, 3.81e-16, 7.106e-15,
+  ];
+
+  let d = 0;
+  let dd = 0;
+  for (let i = coefficients.length - 1; i > 0; i--) {
+    const tmp = d;
+    d = ty * d - dd + coefficients[i];
+    dd = tmp;
+  }
+  const value = t * Math.exp(-z * z + 0.5 * (coefficients[0] + ty * d) - dd);
+  return x >= 0 ? value : 2 - value;
+}
+
+/**
+ * The standard normal quantile (probit): the `p`th percentile of a standard
+ * normal. Acklam's rational approximation, refined by one Halley step against
+ * {@link normalCdf}.
+ * @internal
+ */
+function normalQuantile(p: number): number {
+  if (p <= 0) return Number.NEGATIVE_INFINITY;
+  if (p >= 1) return Number.POSITIVE_INFINITY;
+
+  const a = [
+    -3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.38357751867269e2,
+    -3.066479806614716e1, 2.506628277459239,
+  ];
+  const b = [
+    -5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1,
+    -1.328068155288572e1,
+  ];
+  const c = [
+    -7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838, -2.549732539343734,
+    4.374664141464968, 2.938163982698783,
+  ];
+  const d = [7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996, 3.754408661907416];
+
+  const low = 0.02425;
+  let x: number;
+
+  if (p < low) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    x =
+      (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+      ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  } else if (p <= 1 - low) {
+    const q = p - 0.5;
+    const r = q * q;
+    x =
+      ((((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q) /
+      (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+  } else {
+    const q = Math.sqrt(-2 * Math.log(1 - p));
+    x =
+      -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+      ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+
+  // One Halley step, which takes the approximation to the accuracy of the CDF
+  const e = normalCdf(x) - p;
+  const density = Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+  if (density > 0) {
+    const t = e / density;
+    x = x - t / (1 + (x * t) / 2);
+  }
+  return x;
+}
