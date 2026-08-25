@@ -339,6 +339,278 @@ describe("samples", () => {
   });
 });
 
+describe("sampleWithoutReplacement", () => {
+  it("returns a member of the array and removes it", () => {
+    const rng = seeded();
+    const from = ["a", "b", "c", "d"];
+    const drawn = rng.sampleWithoutReplacement(from);
+    expect(["a", "b", "c", "d"]).toContain(drawn);
+    expect(from).toHaveLength(3);
+    expect(from).not.toContain(drawn);
+  });
+
+  it("never repeats a value when draining an array", () => {
+    const rng = seeded();
+    const from = [1, 2, 3, 4, 5, 6, 7, 8];
+    const drawn = collect(8, () => rng.sampleWithoutReplacement(from));
+    expect([...drawn].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(from).toEqual([]);
+  });
+
+  it("keeps the order of what is left", () => {
+    const rng = seeded();
+    const from = [1, 2, 3, 4, 5];
+    const drawn = rng.sampleWithoutReplacement(from);
+    expect(from).toEqual([1, 2, 3, 4, 5].filter((n) => n !== drawn));
+  });
+
+  it("reaches every position", () => {
+    const rng = seeded();
+    const seen = new Set(collect(500, () => rng.sampleWithoutReplacement(["a", "b", "c", "d"])));
+    expect(seen).toEqual(new Set(["a", "b", "c", "d"]));
+  });
+
+  it("draws each position about equally often", () => {
+    const rng = seeded();
+    const counts = [0, 0, 0, 0];
+    for (let i = 0; i < 4000; i++) counts[rng.sampleWithoutReplacement([0, 1, 2, 3])]++;
+    for (const c of counts) {
+      expect(c).toBeGreaterThan(850);
+      expect(c).toBeLessThan(1150);
+    }
+  });
+
+  it("throws on an empty array", () => {
+    expect(() => seeded().sampleWithoutReplacement([])).toThrow(
+      "Cannot sample from an empty array",
+    );
+  });
+});
+
+describe("samplesWithoutReplacement", () => {
+  it("returns n distinct elements, removing them from the source", () => {
+    const rng = seeded();
+    const from = [1, 2, 3, 4, 5, 6];
+    const result = rng.samplesWithoutReplacement(4, from);
+    expect(result).toHaveLength(4);
+    expect(new Set(result).size).toBe(4);
+    expect(from).toHaveLength(2);
+    for (const r of result) expect(from).not.toContain(r);
+  });
+
+  it("takes everything when n is the whole array", () => {
+    const rng = seeded();
+    const from = [1, 2, 3, 4, 5];
+    const result = rng.samplesWithoutReplacement(5, from);
+    expect([...result].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5]);
+    expect(from).toEqual([]);
+  });
+
+  it("returns an empty array for n of 0, leaving the source alone", () => {
+    const from = [1, 2, 3];
+    expect(seeded().samplesWithoutReplacement(0, from)).toEqual([]);
+    expect(from).toEqual([1, 2, 3]);
+    expect(seeded().samplesWithoutReplacement(0, [])).toEqual([]);
+  });
+
+  it("throws when asked for more than the array holds", () => {
+    expect(() => seeded().samplesWithoutReplacement(4, [1, 2, 3])).toThrow(
+      "Cannot sample 4 values without replacement from 3 elements",
+    );
+    expect(() => seeded().samplesWithoutReplacement(1, [])).toThrow();
+  });
+
+  it("does not throw away elements when it throws", () => {
+    const from = [1, 2, 3];
+    expect(() => seeded().samplesWithoutReplacement(4, from)).toThrow();
+    expect(from).toEqual([1, 2, 3]);
+  });
+
+  it("shuffles rather than takes a prefix", () => {
+    const rng = seeded();
+    const firsts = [0, 0, 0, 0];
+    for (let i = 0; i < 2000; i++) firsts[rng.samplesWithoutReplacement(2, [0, 1, 2, 3])[0]]++;
+    for (const f of firsts) {
+      expect(f).toBeGreaterThan(400);
+      expect(f).toBeLessThan(600);
+    }
+  });
+});
+
+describe("sampleWithoutReplacementWithCounts", () => {
+  it("returns a value and decrements its count in place", () => {
+    const rng = seeded();
+    const cases: [number, string][] = [
+      [3, "circle"],
+      [2, "square"],
+    ];
+    const drawn = rng.sampleWithoutReplacementWithCounts(cases);
+    expect(["circle", "square"]).toContain(drawn);
+    expect(cases.reduce((a, [c]) => a + c, 0)).toBe(4);
+    const forDrawn = cases.find(([, v]) => v === drawn)!;
+    expect(forDrawn[0]).toBe(drawn === "circle" ? 2 : 1);
+  });
+
+  it("draws exactly the bag the counts describe", () => {
+    const rng = seeded();
+    const cases: [number, string][] = [
+      [3, "circle"],
+      [2, "square"],
+      [1, "triangle"],
+    ];
+    const drawn = collect(6, () => rng.sampleWithoutReplacementWithCounts(cases));
+    expect([...drawn].sort()).toEqual([
+      "circle",
+      "circle",
+      "circle",
+      "square",
+      "square",
+      "triangle",
+    ]);
+    expect(cases).toEqual([
+      [0, "circle"],
+      [0, "square"],
+      [0, "triangle"],
+    ]);
+  });
+
+  it("picks in proportion to the counts", () => {
+    const rng = seeded();
+    const counts = { a: 0, b: 0, c: 0 };
+    for (let i = 0; i < 6000; i++) {
+      counts[
+        rng.sampleWithoutReplacementWithCounts([
+          [5, "a"],
+          [3, "b"],
+          [2, "c"],
+        ] as [number, "a" | "b" | "c"][])
+      ]++;
+    }
+    expect(counts.a).toBeGreaterThan(2700);
+    expect(counts.a).toBeLessThan(3300);
+    expect(counts.b).toBeGreaterThan(1600);
+    expect(counts.b).toBeLessThan(2000);
+    expect(counts.c).toBeGreaterThan(1000);
+    expect(counts.c).toBeLessThan(1400);
+  });
+
+  it("never returns a value whose count is zero", () => {
+    const rng = seeded();
+    const drawn = collect(200, () =>
+      rng.sampleWithoutReplacementWithCounts([
+        [0, "never"],
+        [1, "always"],
+        [0, "nor this"],
+      ] as [number, string][]),
+    );
+    expect(new Set(drawn)).toEqual(new Set(["always"]));
+  });
+
+  it("throws when nothing is left to draw", () => {
+    expect(() =>
+      seeded().sampleWithoutReplacementWithCounts([
+        [0, "circle"],
+        [0, "square"],
+      ]),
+    ).toThrow("Nothing left to sample");
+    expect(() => seeded().sampleWithoutReplacementWithCounts<string>([])).toThrow(
+      "Nothing left to sample",
+    );
+  });
+
+  it("throws on counts that are not non-negative integers", () => {
+    expect(() =>
+      seeded().sampleWithoutReplacementWithCounts([
+        [1.5, "circle"],
+        [2, "square"],
+      ]),
+    ).toThrow("Counts must be integers");
+    expect(() =>
+      seeded().sampleWithoutReplacementWithCounts([
+        [-1, "circle"],
+        [2, "square"],
+      ]),
+    ).toThrow("Counts must not be negative");
+    expect(() => seeded().sampleWithoutReplacementWithCounts([[Number.NaN, "circle"]])).toThrow(
+      "Counts must be integers",
+    );
+  });
+});
+
+describe("samplesWithoutReplacementWithCounts", () => {
+  it("returns n values, drawing the counts down as it goes", () => {
+    const rng = seeded();
+    const cases: [number, string][] = [
+      [4, "circle"],
+      [4, "square"],
+    ];
+    const result = rng.samplesWithoutReplacementWithCounts(3, cases);
+    expect(result).toHaveLength(3);
+    expect(cases.reduce((a, [c]) => a + c, 0)).toBe(5);
+    for (const [count] of cases) expect(count).toBeGreaterThanOrEqual(0);
+  });
+
+  it("gives exactly the requested mix when it draws the lot", () => {
+    const rng = seeded();
+    const result = rng.samplesWithoutReplacementWithCounts(6, [
+      [3, "circle"],
+      [2, "square"],
+      [1, "triangle"],
+    ]);
+    const tally = (v: string) => result.filter((r) => r === v).length;
+    expect(tally("circle")).toBe(3);
+    expect(tally("square")).toBe(2);
+    expect(tally("triangle")).toBe(1);
+  });
+
+  it("does not always give them in the same order", () => {
+    const rng = seeded();
+    const runs = collect(20, () =>
+      rng
+        .samplesWithoutReplacementWithCounts(4, [
+          [2, "circle"],
+          [2, "square"],
+        ])
+        .join(","),
+    );
+    expect(new Set(runs).size).toBeGreaterThan(1);
+  });
+
+  it("returns an empty array for n of 0", () => {
+    const cases: [number, string][] = [[2, "circle"]];
+    expect(seeded().samplesWithoutReplacementWithCounts(0, cases)).toEqual([]);
+    expect(cases).toEqual([[2, "circle"]]);
+    expect(seeded().samplesWithoutReplacementWithCounts<string>(0, [])).toEqual([]);
+  });
+
+  it("throws when asked for more than the counts total", () => {
+    expect(() =>
+      seeded().samplesWithoutReplacementWithCounts(7, [
+        [3, "circle"],
+        [2, "square"],
+      ]),
+    ).toThrow("Cannot sample 7 values without replacement from a total count of 5");
+  });
+
+  it("leaves the counts alone when it throws", () => {
+    const cases: [number, string][] = [
+      [3, "circle"],
+      [2, "square"],
+    ];
+    expect(() => seeded().samplesWithoutReplacementWithCounts(7, cases)).toThrow();
+    expect(cases).toEqual([
+      [3, "circle"],
+      [2, "square"],
+    ]);
+  });
+
+  it("throws on counts that are not non-negative integers", () => {
+    expect(() => seeded().samplesWithoutReplacementWithCounts(1, [[0.5, "circle"]])).toThrow(
+      "Counts must be integers",
+    );
+  });
+});
+
 describe("shuffle", () => {
   it("keeps exactly the same elements", () => {
     const rng = seeded();
@@ -648,6 +920,16 @@ const runEverything = () => {
     rng.sample([1, 2, 3, 4, 5]),
     ...rng.samples(3, [1, 2, 3, 4, 5]),
     ...rng.shuffle([1, 2, 3, 4, 5]),
+    rng.sampleWithoutReplacement([1, 2, 3, 4, 5]),
+    ...rng.samplesWithoutReplacement(3, [1, 2, 3, 4, 5]),
+    rng.sampleWithoutReplacementWithCounts([
+      [2, 1],
+      [3, 2],
+    ]),
+    ...rng.samplesWithoutReplacementWithCounts(4, [
+      [2, 1],
+      [3, 2],
+    ]),
     ...rng.perturb({ at: [0.5, 0.5] }),
     rng.gaussian({ mean: 2, sd: 0.5 }),
     rng.poisson(3),

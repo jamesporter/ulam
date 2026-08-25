@@ -30,6 +30,20 @@ import * as vectors from "./vectors.js";
 export type RNGState = [number, number, number, number];
 
 /**
+ * The total of the counts in `[count, value]` pairs, checking as it goes that
+ * every one of them really is a count.
+ */
+const totalOfCounts = <T>(cases: [number, T][]): number => {
+  let total = 0;
+  for (const [count] of cases) {
+    if (!Number.isInteger(count)) throw new Error("Counts must be integers");
+    if (count < 0) throw new Error("Counts must not be negative");
+    total += count;
+  }
+  return total;
+};
+
+/**
  * A seedable pseudo-random number generator with excellent statistical
  * properties, and a library of derived randomness on top of it.
  *
@@ -347,6 +361,50 @@ export class RNG {
     const res: T[] = [];
     for (let i = 0; i < n; i++) {
       res.push(this.sample(from));
+    }
+    return res;
+  }
+
+  /**
+   * Draw one uniform sample from an array without replacement, **removing it
+   * from the array**, so repeated draws never repeat a value.
+   *
+   * Sampling without replacement has to remember what has already been taken,
+   * and the array you pass in is that memory: it loses an element on every
+   * draw, in the way {@link RNG.shuffle} rearranges in place. Pass a copy
+   * (`[...items]`) to leave the original alone.
+   *
+   * @throws Error if the array is empty
+   * @example
+   * ```ts
+   * const deck = ["a", "b", "c"]
+   * rng.sampleWithoutReplacement(deck) // "b", and deck is now ["a", "c"]
+   * ```
+   */
+  sampleWithoutReplacement<T>(from: T[]): T {
+    if (from.length === 0) throw new Error("Cannot sample from an empty array");
+    return from.splice(Math.floor(this.number() * from.length), 1)[0];
+  }
+
+  /**
+   * `n` uniform samples from an array without replacement, so no element comes
+   * back twice. They are **removed from the array** as they are drawn, exactly
+   * as in {@link RNG.sampleWithoutReplacement}.
+   *
+   * @throws Error if `n` is more than the array holds
+   * @example
+   * ```ts
+   * const deck = [1, 2, 3, 4, 5, 6]
+   * rng.samplesWithoutReplacement(2, deck) // [5, 1], and deck has four left
+   * ```
+   */
+  samplesWithoutReplacement<T>(n: number, from: T[]): T[] {
+    if (n > from.length) {
+      throw new Error(`Cannot sample ${n} values without replacement from ${from.length} elements`);
+    }
+    const res: T[] = [];
+    for (let i = 0; i < n; i++) {
+      res.push(this.sampleWithoutReplacement(from));
     }
     return res;
   }
@@ -761,6 +819,75 @@ export class RNG {
    */
   weightedSample<T>(cases: [number, T][]): T {
     return cases[this.categorical(cases.map((c) => c[0]))][1];
+  }
+
+  /**
+   * Sample a value from `[count, value]` pairs without replacement: a value is
+   * as likely as its share of the total count, and the count it came from is
+   * **decremented in place**, so the pairs you pass in are the tally of what
+   * is left to draw.
+   *
+   * The without replacement counterpart of {@link RNG.weightedSample}. Counts
+   * are how many of each thing there are rather than arbitrary weights, so
+   * they must be non-negative integers.
+   *
+   * @throws Error if a count is not a non-negative integer, or nothing is left
+   * to draw
+   * @example
+   * ```ts
+   * const bag: [number, string][] = [
+   *   [3, "circle"],
+   *   [2, "square"],
+   * ]
+   * rng.sampleWithoutReplacementWithCounts(bag) // "circle"
+   * // bag is now [[2, "circle"], [2, "square"]]
+   * ```
+   */
+  sampleWithoutReplacementWithCounts<T>(cases: [number, T][]): T {
+    const total = totalOfCounts(cases);
+    if (total <= 0) throw new Error("Nothing left to sample");
+
+    let r = this.integer(total);
+    for (const c of cases) {
+      if (r < c[0]) {
+        c[0] -= 1;
+        return c[1];
+      }
+      r -= c[0];
+    }
+    // Unreachable: r is always less than the total of the counts
+    throw new Error("Nothing left to sample");
+  }
+
+  /**
+   * `n` samples from `[count, value]` pairs without replacement, drawing the
+   * counts down in place as it goes. Draw the whole total and you have a
+   * shuffled bag of exactly the things the counts described.
+   *
+   * @throws Error if a count is not a non-negative integer, or `n` is more
+   * than the counts total
+   * @example
+   * ```ts
+   * // A row of tiles that is exactly half circles, a third squares
+   * rng.samplesWithoutReplacementWithCounts(6, [
+   *   [3, "circle"],
+   *   [2, "square"],
+   *   [1, "triangle"],
+   * ])
+   * ```
+   */
+  samplesWithoutReplacementWithCounts<T>(n: number, cases: [number, T][]): T[] {
+    const total = totalOfCounts(cases);
+    if (n > total) {
+      throw new Error(
+        `Cannot sample ${n} values without replacement from a total count of ${total}`,
+      );
+    }
+    const res: T[] = [];
+    for (let i = 0; i < n; i++) {
+      res.push(this.sampleWithoutReplacementWithCounts(cases));
+    }
+    return res;
   }
 
   /**

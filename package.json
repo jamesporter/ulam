@@ -1,6 +1,6 @@
 {
   "name": "ulam-prng",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Seeded random number generation for generative art. A PCG-backed RNG with the higher level randomness helpers (sampling, shuffling, distributions from gaussian to Pareto, random vectors and directions, Poisson disk points) you actually reach for.",
   "keywords": [
     "distributions",
