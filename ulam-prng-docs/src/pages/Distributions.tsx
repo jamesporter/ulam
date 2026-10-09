@@ -71,7 +71,7 @@ function Grid({ items }: { items: Distribution[] }) {
         <Link
           key={d.id}
           to={`/docs/distributions/${d.id}`}
-          className="group flex flex-col rounded-xl border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-brand/50 hover:shadow-md"
+          className="group flex flex-col border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-brand/50 hover:shadow-md"
         >
           <div className="flex items-baseline justify-between gap-2">
             <span className="font-heading font-semibold">{d.title}</span>

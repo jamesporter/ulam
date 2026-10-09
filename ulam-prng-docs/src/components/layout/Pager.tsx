@@ -12,8 +12,8 @@ export function Pager() {
   return (
     <nav className="mt-16 grid grid-cols-2 gap-4 border-t pt-8">
       {prev ? (
-        <Link to={prev.to} className="group rounded-xl border p-4 transition-colors hover:border-brand/50 hover:bg-accent/40">
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <Link to={prev.to} className="group border border-brand-2/30 bg-brand-2/6 p-4 transition-colors hover:border-brand-2 hover:bg-brand-2/12">
+          <div className="flex items-center gap-1 text-xs font-medium text-brand-2">
             <ArrowLeft className="size-3 transition-transform group-hover:-translate-x-0.5" /> Previous
           </div>
           <div className="mt-1 font-medium">{prev.title}</div>
@@ -22,8 +22,8 @@ export function Pager() {
         <span />
       )}
       {next && (
-        <Link to={next.to} className="group rounded-xl border p-4 text-right transition-colors hover:border-brand/50 hover:bg-accent/40">
-          <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+        <Link to={next.to} className="group border border-brand-2/30 bg-brand-2/6 p-4 text-right transition-colors hover:border-brand-2 hover:bg-brand-2/12">
+          <div className="flex items-center justify-end gap-1 text-xs font-medium text-brand-2">
             Next <ArrowRight className="size-3 transition-transform group-hover:translate-x-0.5" />
           </div>
           <div className="mt-1 font-medium">{next.title}</div>

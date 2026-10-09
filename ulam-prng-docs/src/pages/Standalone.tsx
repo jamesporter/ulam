@@ -36,7 +36,7 @@ perlinNoise(rng.random).at(0.5, 0.5)`}
       </Callout>
 
       <H2 id="functions">Functions</H2>
-      <div className="overflow-hidden rounded-xl border">
+      <div className="overflow-hidden border">
         <table className="w-full text-sm">
           <tbody>
             {listed.map((f) => (

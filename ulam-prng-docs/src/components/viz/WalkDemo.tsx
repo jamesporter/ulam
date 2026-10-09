@@ -36,7 +36,7 @@ export function WalkDemo() {
       }
     >
       <div className="p-5">
-        <svg viewBox="0 0 1 1" className="mx-auto aspect-square w-full max-w-md rounded-xl border bg-card" role="img" aria-label="Random walks">
+        <svg viewBox="0 0 1 1" className="mx-auto aspect-square w-full max-w-md border bg-card" role="img" aria-label="Random walks">
           <defs>
             <clipPath id="walk-clip">
               <rect width="1" height="1" />

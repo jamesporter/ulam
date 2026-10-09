@@ -28,7 +28,7 @@ function Panel({ title, code, dots }: { title: string; code: string; dots: Dot[]
         <span className="text-sm font-semibold">{title}</span>
         <code className="font-mono text-[11px] text-muted-foreground">{code}</code>
       </div>
-      <svg viewBox="0 0 100 100" className="aspect-square w-full rounded-xl border bg-card" aria-label={title} role="img">
+      <svg viewBox="0 0 100 100" className="aspect-square w-full border bg-card" aria-label={title} role="img">
         {dots.map((d, i) => (
           <circle
             key={i}

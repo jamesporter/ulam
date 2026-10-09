@@ -65,7 +65,7 @@ ${standaloneCall(dist.call(defaults(dist)), 'Math.random')} // Or any () => numb
           <H2 id="related">Related</H2>
           <div className="grid gap-3 sm:grid-cols-2">
             {related.map((d) => (
-              <Link key={d.id} to={`/docs/distributions/${d.id}`} className="rounded-xl border p-4 transition-colors hover:border-brand/50 hover:bg-accent/40">
+              <Link key={d.id} to={`/docs/distributions/${d.id}`} className="border p-4 transition-colors hover:border-brand/50 hover:bg-accent/40">
                 <div className="font-medium">{d.title}</div>
                 <div className="mt-1 text-sm text-muted-foreground">
                   <Md>{d.tagline}</Md>

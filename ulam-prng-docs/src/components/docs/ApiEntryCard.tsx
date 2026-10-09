@@ -113,7 +113,7 @@ export function ApiEntryCard({
 
 export function OptionsTable({ options }: { options: { name: string; type: string; default?: string; description: string }[] }) {
   return (
-    <div className="mt-4 overflow-x-auto rounded-lg border">
+    <div className="mt-4 overflow-x-auto border">
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
           <tr>

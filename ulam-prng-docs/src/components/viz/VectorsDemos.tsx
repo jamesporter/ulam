@@ -28,7 +28,7 @@ export function DiscDemo() {
   })
 
   const plot = (pts: number[][], label: string) => (
-    <svg viewBox="-1.05 -1.05 2.1 2.1" className="aspect-square w-full rounded-xl border bg-card" role="img" aria-label={label}>
+    <svg viewBox="-1.05 -1.05 2.1 2.1" className="aspect-square w-full border bg-card" role="img" aria-label={label}>
       <circle r={1} className="fill-none stroke-foreground/20" strokeWidth={0.008} />
       {pts.map(([x, y], i) => (
         <circle key={i} cx={x} cy={y} r={0.011} className="fill-brand" />
@@ -67,7 +67,7 @@ function Rose({ angles, label }: { angles: number[]; label: string }) {
   const expected = angles.length / bins
   const scale = 0.55 / expected
   return (
-    <svg viewBox="-1.1 -1.1 2.2 2.2" className="aspect-square w-full rounded-xl border bg-card" role="img" aria-label={label}>
+    <svg viewBox="-1.1 -1.1 2.2 2.2" className="aspect-square w-full border bg-card" role="img" aria-label={label}>
       <circle r={0.55} className="fill-none stroke-brand-2" strokeWidth={0.012} strokeDasharray="0.03 0.03" />
       {counts.map((c, i) => {
         const a0 = (i / bins) * Math.PI * 2
@@ -165,7 +165,7 @@ function SphereCanvas({ points, label }: { points: Vec3[]; label: string }) {
     return () => cancelAnimationFrame(raf)
   }, [points, colours])
 
-  return <canvas ref={ref} className="aspect-square w-full rounded-xl border bg-card" role="img" aria-label={label} />
+  return <canvas ref={ref} className="aspect-square w-full border bg-card" role="img" aria-label={label} />
 }
 
 export function SphereDemo() {
@@ -241,7 +241,7 @@ export function BlurDemo() {
       }
     >
       <div className="p-5">
-        <svg viewBox="0 0 1 1" className="mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-xl border bg-card" role="img" aria-label="Gaussian blur of points">
+        <svg viewBox="0 0 1 1" className="mx-auto aspect-square w-full max-w-sm overflow-hidden border bg-card" role="img" aria-label="Gaussian blur of points">
           {uni.map(([x, y], i) => (
             <circle key={`u${i}`} cx={x} cy={y} r={0.005} className="fill-brand-2" />
           ))}

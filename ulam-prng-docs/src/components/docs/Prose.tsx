@@ -57,7 +57,7 @@ export function Callout({
   return (
     <div
       className={cn(
-        'my-6 rounded-xl border-l-4 px-5 py-4 text-sm leading-6',
+        'my-6 border-l-4 px-5 py-4 text-sm leading-6',
         tone === 'brand' ? 'border-brand bg-brand/6' : 'border-brand-2 bg-brand-2/8',
       )}
     >
