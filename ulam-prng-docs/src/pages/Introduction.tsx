@@ -99,10 +99,10 @@ onUnitSphere(rng.random)`}
       <H2 id="tour">Where next</H2>
       <div className="grid gap-3 sm:grid-cols-2">
         {tour.map(([title, to, body]) => (
-          <Link key={to} to={to} className="group rounded-xl border p-4 transition-colors hover:border-brand/50 hover:bg-accent/40">
+          <Link key={to} to={to} className="group border border-brand-2/30 bg-brand-2/6 p-4 transition-colors hover:border-brand-2 hover:bg-brand-2/12">
             <div className="flex items-center justify-between font-medium">
               {title}
-              <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-brand" />
+              <ArrowRight className="size-4 text-brand-2 transition-transform group-hover:translate-x-0.5" />
             </div>
             <p className="mt-1 text-sm text-muted-foreground">{body}</p>
           </Link>

@@ -10,7 +10,7 @@ function Scatter({ points, title, r = 0.8, note }: { points: [number, number][];
         <span className="font-semibold">{title}</span>
         <span className="font-mono text-xs text-muted-foreground">{note}</span>
       </div>
-      <svg viewBox="-2 -2 104 104" className="aspect-square w-full rounded-xl border bg-card" role="img" aria-label={title}>
+      <svg viewBox="-2 -2 104 104" className="aspect-square w-full border bg-card" role="img" aria-label={title}>
         {points.map(([x, y], i) => (
           <circle key={i} cx={x * 100} cy={y * 100} r={r} className="fill-brand" />
         ))}
@@ -71,7 +71,7 @@ export function PerturbDemo() {
       }
     >
       <div className="p-5">
-        <svg viewBox="0 0 100 100" className="mx-auto aspect-square w-full max-w-sm rounded-xl border bg-card" role="img" aria-label="Perturbed grid">
+        <svg viewBox="0 0 100 100" className="mx-auto aspect-square w-full max-w-sm border bg-card" role="img" aria-label="Perturbed grid">
           {grid.map(([x, y], i) => (
             <g key={i}>
               <rect

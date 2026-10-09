@@ -20,7 +20,7 @@ export function SeedDemo() {
       controls={<SeedControl text={text} setText={setText} reroll={reroll} className="sm:col-span-2" />}
     >
       <div className="grid items-center gap-6 p-5 sm:grid-cols-[180px_1fr]">
-        <DotSketch seed={seed} className="mx-auto max-w-44 rounded-xl border bg-card" />
+        <DotSketch seed={seed} className="mx-auto max-w-44 border bg-card" />
         <div className="space-y-3 font-mono text-sm">
           <div className="text-muted-foreground">
             const rng = new RNG(<span className="text-brand">{seedLiteral(seed)}</span>)
@@ -59,7 +59,7 @@ export function NeighboursDemo() {
         ].map(([value, set], i) => (
           <div key={i} className="space-y-3">
             <Input value={value as string} onChange={(e) => (set as (s: string) => void)(e.target.value)} className="font-mono" aria-label={`Seed ${i + 1}`} />
-            <DotSketch seed={value as string} className="rounded-xl border bg-card" />
+            <DotSketch seed={value as string} className="border bg-card" />
             <p className="text-center font-mono text-xs text-muted-foreground">
               hashSeed → [{hashSeed(value as string).join(', ')}]
             </p>

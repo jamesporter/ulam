@@ -136,7 +136,7 @@ export function Demo({
   className?: string
 }) {
   return (
-    <figure className={cn('not-prose my-8 overflow-hidden rounded-2xl border bg-card shadow-xs', className)}>
+    <figure className={cn('not-prose my-8 overflow-hidden border bg-card shadow-xs', className)}>
       {(title || caption) && (
         <figcaption className="flex flex-col gap-0.5 border-b px-5 py-3">
           {title && (

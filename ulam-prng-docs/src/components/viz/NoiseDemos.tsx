@@ -136,7 +136,7 @@ export function NoiseDemo() {
       }
     >
       <div className="grid gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-center">
-        <canvas ref={ref} className="aspect-square w-full rounded-xl border" style={{ imageRendering: 'auto' }} aria-label="Noise field" role="img" />
+        <canvas ref={ref} className="aspect-square w-full border" style={{ imageRendering: 'auto' }} aria-label="Noise field" role="img" />
         <div>
           <p className="mb-1 text-xs text-muted-foreground">A slice through the middle: the same field in one dimension</p>
           <svg viewBox={`0 0 ${plotSize.width} 120`} className="w-full" role="img" aria-label="Noise slice">

@@ -69,8 +69,8 @@ export function Home() {
           </div>
 
           <div className="relative">
-            <div className="absolute -inset-4 -z-10 rounded-[2rem] brand-gradient opacity-15 blur-2xl" />
-            <div className="overflow-hidden rounded-3xl border bg-card shadow-xl">
+            <div className="absolute -inset-4 -z-10 brand-gradient opacity-15 blur-2xl" />
+            <div className="overflow-hidden border bg-card shadow-xl">
               <HeroArt seed={seed} />
               <div className="flex items-center gap-2 border-t px-4 py-3 font-mono text-sm">
                 <span className="text-muted-foreground">new RNG(</span>
@@ -132,7 +132,7 @@ export function Home() {
             <Link
               key={f.title}
               to={f.to}
-              className="group rounded-2xl border bg-card p-5 transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-lg"
+              className="group border bg-card p-5 transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-lg"
             >
               <div className="flex size-9 items-center justify-center rounded-lg bg-brand/10 text-brand transition-colors group-hover:brand-gradient group-hover:text-white">
                 <f.icon className="size-4.5" />
