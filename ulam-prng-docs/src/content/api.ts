@@ -968,6 +968,11 @@ export const api: Record<string, ApiEntry> = Object.fromEntries(
   apiGroups.flatMap((g) => g.entries).map((e) => [e.id, e]),
 )
 
+/** Where an entry is documented: its guide page, at its own anchor. */
+export function apiHref(e: ApiEntry): string {
+  return e.page.startsWith('/docs/distributions/') ? e.page : `${e.page}#${e.id}`
+}
+
 export function entry(id: string): ApiEntry {
   const e = api[id]
   if (!e) throw new Error(`No API entry ${id}`)
