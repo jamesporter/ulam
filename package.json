@@ -1,11 +1,13 @@
 {
   "name": "ulam-prng",
-  "version": "0.4.0",
-  "description": "Seeded random number generation for generative art. A PCG-backed RNG with the higher level randomness helpers (sampling, shuffling, distributions from gaussian to Pareto, random vectors and directions, Poisson disk points) you actually reach for. String seeds and independent streams included.",
+  "version": "0.5.0",
+  "description": "Seeded random number generation for generative art. A PCG-backed RNG with the higher level randomness helpers (sampling, shuffling, distributions from gaussian to Pareto, random vectors and directions, Poisson disk and quasi-random points, simplex noise) you actually reach for. String seeds, independent streams and jump-ahead included.",
   "keywords": [
     "distributions",
     "gaussian",
     "generative-art",
+    "low-discrepancy",
+    "noise",
     "pcg",
     "poisson-disk",
     "random",
@@ -14,6 +16,7 @@
     "seeded",
     "vector"
   ],
+  "homepage": "https://ulam-prng.pages.dev/",
   "license": "MIT",
   "author": "James Porter <james@amimetic.co.uk>",
   "files": [

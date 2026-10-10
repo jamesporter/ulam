@@ -100,13 +100,14 @@ const chooser: [string, string, string][] = [
   ['Which one, by weight?', 'categorical', 'Categorical'],
   ['Mostly in place, a few flung far', 'cauchy', 'Cauchy'],
   ['Ranked sizes', 'zipf', 'Zipf'],
+  ['A heading, give or take', 'von-mises', 'Von Mises'],
 ]
 
 export function Distributions() {
   return (
     <>
       <PageHeader eyebrow="Randomness" title="Distributions">
-        Twenty shapes of randomness, from the bell curve to power laws. Each one has its own page where you can move its
+        Twenty-one shapes of randomness, from the bell curve to power laws. Each one has its own page where you can move its
         parameters and watch real draws from the library settle onto the exact curve.
       </PageHeader>
 

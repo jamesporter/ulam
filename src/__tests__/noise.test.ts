@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { perlinNoise, valueNoise } from "../noise.js";
+import { perlinNoise, simplexNoise, valueNoise } from "../noise.js";
 import { RNG } from "../rng.js";
 import type { NoiseField } from "../noise.js";
 
 const fields: [string, (rng: () => number) => NoiseField][] = [
   ["value noise", valueNoise],
   ["Perlin noise", perlinNoise],
+  ["simplex noise", simplexNoise],
 ];
 
 /**
@@ -175,6 +176,29 @@ describe("Perlin noise specifically", () => {
   });
 });
 
+describe("simplex noise specifically", () => {
+  it("is zero at every lattice point in one dimension", () => {
+    const field = simplexNoise(new RNG(1234).random);
+    for (let i = -5; i < 5; i++) expect(Math.abs(field.at(i))).toBeLessThan(1e-12);
+  });
+
+  it("looks the same along the axes as along the diagonal", () => {
+    // Perlin noise has more structure along the grid; simplex should not care
+    const field = simplexNoise(new RNG(1234).random);
+    const variation = (dx: number, dy: number) => {
+      let total = 0;
+      for (let t = 0; t < 400; t += 0.05) {
+        total += Math.abs(field.at(t * dx, t * dy) - field.at((t + 0.05) * dx, (t + 0.05) * dy));
+      }
+      return total;
+    };
+    const along = variation(1, 0);
+    const diagonal = variation(Math.SQRT1_2, Math.SQRT1_2);
+    expect(diagonal / along).toBeGreaterThan(0.85);
+    expect(diagonal / along).toBeLessThan(1.15);
+  });
+});
+
 describe("noise from an RNG", () => {
   it("matches the standalone functions driven by the same generator", () => {
     expect(new RNG(1234).valueNoise().at(0.5, 1.5)).toBe(
@@ -182,6 +206,9 @@ describe("noise from an RNG", () => {
     );
     expect(new RNG(1234).perlinNoise().at(0.5, 1.5)).toBe(
       perlinNoise(new RNG(1234).random).at(0.5, 1.5),
+    );
+    expect(new RNG(1234).simplexNoise().at(0.5, 1.5)).toBe(
+      simplexNoise(new RNG(1234).random).at(0.5, 1.5),
     );
   });
 

@@ -14,6 +14,7 @@ import { randomSeedWords } from "./entropy.js";
 import { hashSeed } from "./hash.js";
 import {
   add64,
+  advance,
   BIT_27,
   BIT_53,
   DEFAULT_INC_HI,
@@ -23,8 +24,12 @@ import {
   MUL_LO,
 } from "./pcg.js";
 import type { NoiseField } from "./noise.js";
-import { perlinNoise, valueNoise } from "./noise.js";
+import { perlinNoise, simplexNoise, valueNoise } from "./noise.js";
+import type { PoissonDiskSpacing } from "./poissonDisk.js";
 import { poissonDiskPoints } from "./poissonDisk.js";
+import * as shapes from "./shapes.js";
+import type { JitteredGridConfig, QuasiRandomConfig } from "./spreads.js";
+import { jitteredGridPoints, quasiRandomPoints } from "./spreads.js";
 import type { Point2D, Vec2, Vec3, Vec4 } from "./types.js";
 import * as vectors from "./vectors.js";
 import type { WalkConfig } from "./walk.js";
@@ -204,6 +209,39 @@ export class RNG {
     this.state[1] = state[1];
     this.state[2] = state[2];
     this.state[3] = state[3] | 1;
+  }
+
+  /**
+   * Jumps `n` draws along the sequence without making them, in time
+   * proportional to `log n` rather than `n`. A negative `n` jumps back.
+   *
+   * A draw here is one call to {@link RNG.next}; {@link RNG.number} makes two
+   * of them, so to skip a thousand `number()`s, skip two thousand.
+   *
+   * Seeds and streams are left alone: the generator is simply further along,
+   * or further back, in its own sequence.
+   *
+   * @param n - How many draws to jump; any safe integer, positive or negative
+   * @returns This generator, for chaining
+   * @throws Error if `n` is not a safe integer
+   * @example
+   * ```ts
+   * rng.skip(1_000_000) // As if next() had been called a million times
+   * rng.skip(-2).next() // Repeat the draw before last
+   * ```
+   */
+  skip(n: number): this {
+    if (!Number.isSafeInteger(n)) throw new Error("n must be a safe integer");
+    const m = Math.abs(n);
+    let hi = Math.floor(m / 0x100000000) >>> 0;
+    let lo = m >>> 0;
+    if (n < 0) {
+      // Going back n steps is going forward 2^64 - n steps, mod 2^64
+      hi = (~hi + (lo === 0 ? 1 : 0)) >>> 0;
+      lo = (~lo + 1) >>> 0;
+    }
+    advance(this.state, hi, lo);
+    return this;
   }
 
   /**
@@ -700,28 +738,55 @@ export class RNG {
    * Poisson disk sampled points: randomly placed, but no two closer together
    * than `minDist`. Much more even, and more pleasing, than pure random points.
    *
-   * @param config.minDist - Minimum distance between any two points
+   * `minDist` can also be a function of position, for density that varies
+   * across the canvas — denser where it is small, sparser where it is large.
+   * Neighbours then keep the average of their two spacings apart, and
+   * `maxDist` must say how large the function can get.
+   *
+   * `contains` confines the points to a shape: only places where it returns
+   * `true` are filled, including separate islands of it.
+   *
+   * @param config.minDist - Minimum distance between any two points, or a
+   * function giving it at each point
+   * @param config.maxDist - The largest `minDist` can be; required when it is
+   * a function, and larger values are capped at it
+   * @param config.contains - Which points of the region to fill (default: all of it)
    * @param config.width - Width of the region (default: 1)
    * @param config.height - Height of the region (default: 1)
    * @param config.attempts - Attempts to place each point; higher packs tighter (default: 30)
+   * @throws Error if the width, height or spacing is not positive, or
+   * `minDist` is a function and `maxDist` is missing
    * @example
    * ```ts
    * for (const [x, y] of rng.poissonDiskPoints({ minDist: 0.05 })) {
    *   drawDot(x, y)
    * }
+   *
+   * // Dense on the left, sparse on the right
+   * rng.poissonDiskPoints({ minDist: ([x]) => 0.01 + 0.05 * x, maxDist: 0.06 })
+   *
+   * // Only inside a circle
+   * rng.poissonDiskPoints({
+   *   minDist: 0.03,
+   *   contains: ([x, y]) => (x - 0.5) ** 2 + (y - 0.5) ** 2 < 0.16,
+   * })
    * ```
    */
   poissonDiskPoints(config: {
-    minDist: number;
+    minDist: PoissonDiskSpacing;
+    maxDist?: number;
+    contains?: (at: Point2D) => boolean;
     width?: number;
     height?: number;
     attempts?: number;
   }): Point2D[] {
-    const { minDist, width = 1, height = 1, attempts = 30 } = config;
+    const { minDist, maxDist, contains, width = 1, height = 1, attempts = 30 } = config;
     return poissonDiskPoints({
       width,
       height,
       minDist,
+      maxDist,
+      contains,
       rng: this.random,
       k: attempts,
     });
@@ -740,7 +805,9 @@ export class RNG {
    */
   forPoissonDiskPoints(
     config: {
-      minDist: number;
+      minDist: PoissonDiskSpacing;
+      maxDist?: number;
+      contains?: (at: Point2D) => boolean;
       width?: number;
       height?: number;
       attempts?: number;
@@ -748,6 +815,57 @@ export class RNG {
     callback: (at: Point2D, i: number) => void,
   ): void {
     this.poissonDiskPoints(config).forEach(callback);
+  }
+
+  /**
+   * Quasi-random points: a low discrepancy sequence, spreading out as evenly
+   * as it can however many you take. Never clumps, never leaves a gap, and
+   * costs nothing like Poisson disk sampling — though it is not quite as
+   * natural looking up close.
+   *
+   * `"r2"` (the default) is Roberts' sequence on the plastic number; `"halton"`
+   * is the classic, in bases 2 and 3. Either way the randomness is one offset
+   * shared by every point, so it costs two draws whatever `n` is, and each
+   * seed gives a different, equally even, set.
+   *
+   * @param config.n - How many points
+   * @param config.width - Width of the region (default: 1)
+   * @param config.height - Height of the region (default: 1)
+   * @param config.sequence - `"r2"` or `"halton"` (default: `"r2"`)
+   * @throws Error if `n` is not a non-negative integer, or the width or height
+   * is not positive
+   * @example
+   * ```ts
+   * rng.quasiRandomPoints({ n: 500 })
+   * rng.quasiRandomPoints({ n: 500, sequence: "halton", height: 0.75 })
+   * ```
+   */
+  quasiRandomPoints(config: QuasiRandomConfig): Point2D[] {
+    return quasiRandomPoints(this.random, config);
+  }
+
+  /**
+   * A jittered grid: one random point in each cell of a grid, so the points
+   * are spread far more evenly than uniform ones, at the same cost.
+   *
+   * `jitter` runs from a regular grid at 0 to anywhere in the cell at 1. Rows
+   * default to however many keep the cells square.
+   *
+   * @param config.columns - How many cells across
+   * @param config.rows - How many cells down (default: enough for square cells)
+   * @param config.width - Width of the region (default: 1)
+   * @param config.height - Height of the region (default: 1)
+   * @param config.jitter - How far from its cell's centre a point may stray, 0 to 1 (default: 1)
+   * @throws Error if `columns` or `rows` is not a positive integer, the width
+   * or height is not positive, or `jitter` is outside `[0, 1]`
+   * @example
+   * ```ts
+   * rng.jitteredGridPoints({ columns: 20 }) // 400 points
+   * rng.jitteredGridPoints({ columns: 20, jitter: 0.3 }) // A grid, roughened
+   * ```
+   */
+  jitteredGridPoints(config: JitteredGridConfig): Point2D[] {
+    return jitteredGridPoints(this.random, config);
   }
 
   /**
@@ -993,6 +1111,22 @@ export class RNG {
   }
 
   /**
+   * Von Mises random angle: the circular counterpart of a gaussian, for angles
+   * that cluster around a heading. At `kappa` 0 every direction is equally
+   * likely; as it grows, the angles bunch ever tighter about `mean`.
+   *
+   * @returns An angle in radians, within π either side of `mean`
+   * @throws Error if `kappa` is negative
+   * @example
+   * ```ts
+   * rng.vonMises({ mean: Math.PI / 2, kappa: 4 }) // Mostly pointing up
+   * ```
+   */
+  vonMises(config?: { mean?: number; kappa?: number }): number {
+    return dist.vonMises(this.random, config);
+  }
+
+  /**
    * Sample a value from `[weight, value]` pairs, in proportion to the weights.
    *
    * The value flavoured counterpart of {@link RNG.proportionately}, which runs
@@ -1011,6 +1145,67 @@ export class RNG {
    */
   weightedSample<T>(cases: [number, T][]): T {
     return cases[this.categorical(cases.map((c) => c[0]))][1];
+  }
+
+  /**
+   * A sampler for `[weight, value]` pairs, built once and then drawn from as
+   * often as you like at constant cost, however many values there are.
+   *
+   * Where {@link RNG.weightedSample} walks the weights on every draw, this
+   * prepares Vose's alias table up front, after which each draw is a single
+   * uniform number and a lookup. The sampler draws from this generator, at the
+   * time it is called.
+   *
+   * @throws Error if there are no cases, a weight is negative, or the weights
+   * do not sum to something positive
+   * @example
+   * ```ts
+   * const colour = rng.weightedSampler([
+   *   [5, "ink"],
+   *   [3, "rust"],
+   *   [1, "gold"],
+   * ])
+   * for (const p of points) draw(p, colour())
+   * ```
+   */
+  weightedSampler<T>(cases: [number, T][]): () => T {
+    const n = cases.length;
+    if (n === 0) throw new Error("Must have at least one weight");
+
+    let total = 0;
+    for (const [weight] of cases) {
+      if (weight < 0) throw new Error("Weights must not be negative");
+      total += weight;
+    }
+    if (total <= 0) throw new Error("Must be positive total");
+
+    // Every column of the table holds one value up to its own probability, and
+    // is topped up to a full share with some other value: its alias
+    const probability = new Float64Array(n);
+    const alias = new Uint32Array(n);
+    const scaled = cases.map(([weight]) => (weight * n) / total);
+    const small: number[] = [];
+    const large: number[] = [];
+    for (let i = n - 1; i >= 0; i--) (scaled[i] < 1 ? small : large).push(i);
+
+    while (small.length > 0 && large.length > 0) {
+      const s = small.pop()!;
+      const l = large.pop()!;
+      probability[s] = scaled[s];
+      alias[s] = l;
+      scaled[l] = scaled[l] + scaled[s] - 1;
+      (scaled[l] < 1 ? small : large).push(l);
+    }
+    // Whatever is left is a full share, give or take floating point drift
+    for (const i of large) probability[i] = 1;
+    for (const i of small) probability[i] = 1;
+
+    const values = cases.map((c) => c[1]);
+    return () => {
+      const u = this.number() * n;
+      const i = Math.min(n - 1, Math.floor(u));
+      return u - i < probability[i] ? values[i] : values[alias[i]];
+    };
   }
 
   /**
@@ -1080,6 +1275,41 @@ export class RNG {
       res.push(this.sampleWithoutReplacementWithCounts(cases));
     }
     return res;
+  }
+
+  /**
+   * `k` items chosen uniformly from an iterable of any length — an array, a
+   * set, a generator — in one pass, without knowing how long it is in advance
+   * and without holding more than `k` items at once. Reservoir sampling.
+   *
+   * Every set of `k` items is equally likely to be the one chosen. They come
+   * back in the order the reservoir holds them, which is not itself random;
+   * {@link RNG.shuffle} them if order matters. Fewer than `k` items gives all
+   * of them.
+   *
+   * Takes one draw per item after the first `k`.
+   *
+   * @throws Error if `k` is not a non-negative integer
+   * @example
+   * ```ts
+   * rng.reservoirSample(10, lines()) // Ten lines from a stream of any length
+   * rng.reservoirSample(3, new Set(words))
+   * ```
+   */
+  reservoirSample<T>(k: number, items: Iterable<T>): T[] {
+    if (!Number.isInteger(k) || k < 0) throw new Error("k must be a non-negative integer");
+    const reservoir: T[] = [];
+    let seen = 0;
+    for (const item of items) {
+      if (seen < k) {
+        reservoir.push(item);
+      } else {
+        const j = Math.floor(this.number() * (seen + 1));
+        if (j < k) reservoir[j] = item;
+      }
+      seen++;
+    }
+    return reservoir;
   }
 
   /**
@@ -1193,6 +1423,50 @@ export class RNG {
   }
 
   /**
+   * A uniformly random point inside the triangle with corners `a`, `b` and
+   * `c`. Two draws, always.
+   *
+   * @example
+   * ```ts
+   * rng.inTriangle([0, 0], [1, 0], [0.5, 1])
+   * ```
+   */
+  inTriangle(a: Vec2, b: Vec2, c: Vec2): Vec2 {
+    return shapes.inTriangle(this.random, a, b, c);
+  }
+
+  /**
+   * A uniformly random point inside a polygon given its corners in order,
+   * convex or not. Rejection sampled from its bounding box, so thin shapes
+   * take more draws than fat ones.
+   *
+   * @throws Error if there are fewer than three vertices, or the polygon has
+   * no area
+   * @example
+   * ```ts
+   * rng.inPolygon([[0, 0], [1, 0], [1, 1], [0.5, 0.4], [0, 1]])
+   * ```
+   */
+  inPolygon(vertices: Vec2[]): Vec2 {
+    return shapes.inPolygon(this.random, vertices);
+  }
+
+  /**
+   * A uniformly random point in a ring about the origin, between radii
+   * `inner` and `outer`. Uniform by area.
+   *
+   * @throws Error if `inner` is negative, or larger than `outer`
+   * @example
+   * ```ts
+   * rng.inAnnulus({ inner: 0.8 }) // Just inside the unit circle
+   * rng.inAnnulus({ inner: 2, outer: 3 })
+   * ```
+   */
+  inAnnulus(config: { inner: number; outer?: number }): Vec2 {
+    return shapes.inAnnulus(this.random, config);
+  }
+
+  /**
    * A seeded field of value noise: a random value at every lattice point,
    * smoothly interpolated between them, so nearby points get nearby values.
    *
@@ -1225,6 +1499,23 @@ export class RNG {
    */
   perlinNoise(): NoiseField {
     return perlinNoise(this.random);
+  }
+
+  /**
+   * A seeded field of simplex noise: Perlin's successor to his own gradient
+   * noise, built on triangles rather than squares. Looks the same in every
+   * direction, with none of the grid-aligned streaks {@link RNG.perlinNoise}
+   * can show.
+   *
+   * @example
+   * ```ts
+   * const noise = rng.simplexNoise()
+   * noise.at(x * 3, y * 3, t)
+   * noise.fbm({ octaves: 5 }).at(x, y)
+   * ```
+   */
+  simplexNoise(): NoiseField {
+    return simplexNoise(this.random);
   }
 
   /**

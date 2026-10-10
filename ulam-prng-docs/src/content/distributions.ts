@@ -8,6 +8,7 @@ import {
   normalCdf,
   normalPdf,
   studentTPdf,
+  vonMisesPdf,
 } from '@/lib/stats'
 
 export type Values = Record<string, number>
@@ -505,6 +506,47 @@ export const continuous: ContinuousDistribution[] = [
       const z = normalCdf(b) - normalCdf(a)
       const d = (normalPdf(a) - normalPdf(b)) / z
       return v.sd ** 2 * (1 + (a * normalPdf(a) - b * normalPdf(b)) / z - d * d)
+    },
+  },  {
+    kind: 'continuous',
+    id: 'von-mises',
+    method: 'vonMises',
+    title: 'Von Mises',
+    tagline: 'A bell curve wrapped round a circle: angles that cluster about a heading.',
+    tags: ['circular', 'angles'],
+    signature: 'vonMises(config?: { mean?: number; kappa?: number }): number',
+    standalone: 'vonMises(rng: RandomSource, config?: { mean?: number; kappa?: number }): number',
+    description: [
+      'The circular counterpart of a gaussian: an angle that clusters about `mean`, as tightly as the concentration `kappa` says. At 0 every direction is equally likely; as it grows the angles bunch ever tighter, until it behaves like a gaussian with standard deviation `1 / sqrt(kappa)`.',
+      'Reach for it for headings, orientations and hue offsets — anything that wraps round. A gaussian taken as an angle has no idea that −π and π are the same place; this does.',
+    ],
+    options: [
+      { name: 'mean', type: 'number', default: '0', description: 'The heading the angles cluster about, in radians' },
+      { name: 'kappa', type: 'number', default: '1', description: 'Concentration: 0 is uniform, larger is tighter' },
+    ],
+    returns: 'An angle in radians, within π either side of `mean`.',
+    throws: ['if `kappa` is negative'],
+    algorithm: 'Best and Fisher’s rejection method, in the form Python’s standard library uses.',
+    controls: [
+      { key: 'mean', label: 'mean', min: -3, max: 3, step: 0.05, default: 0 },
+      { key: 'kappa', label: 'kappa', min: 0, max: 20, step: 0.1, default: 2 },
+    ],
+    call: (v) => `vonMises(${config(v, ['mean', 'kappa'], { mean: 0, kappa: 1 })})`,
+    sample: (rng, v) => rng.vonMises({ mean: v.mean, kappa: v.kappa }),
+    pdf: (x, v) => vonMisesPdf(x, v.mean, v.kappa),
+    view: (v) => [v.mean - Math.PI, v.mean + Math.PI],
+    mean: (v) => v.mean,
+    variance: (v) => {
+      // The variance of the angle itself, measured from the mean, numerically
+      const steps = 400
+      const h = (2 * Math.PI) / steps
+      let total = 0
+      for (let i = 0; i <= steps; i++) {
+        const t = -Math.PI + i * h
+        const w = i === 0 || i === steps ? 1 : i % 2 ? 4 : 2
+        total += w * t * t * vonMisesPdf(v.mean + t, v.mean, v.kappa)
+      }
+      return (total * h) / 3
     },
   },
 ]

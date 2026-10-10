@@ -190,6 +190,47 @@ describe("golden vectors", () => {
     const forked = new RNG("sunflower").fork();
     expect(collect(4, () => forked.number())).toEqual(FORK);
   });
+
+  it("pins the 0.5.0 additions", () => {
+    expect(new RNG(1234).skip(1_000_000_007).next()).toBe(SKIP);
+    const rng = new RNG(1234);
+    expect(collect(4, () => rng.vonMises({ mean: 1, kappa: 3 }))).toEqual(VON_MISES);
+    expect(new RNG(1234).quasiRandomPoints({ n: 3 })).toEqual(QUASI_R2);
+    expect(new RNG(1234).quasiRandomPoints({ n: 3, sequence: "halton" })).toEqual(QUASI_HALTON);
+    expect(new RNG(1234).jitteredGridPoints({ columns: 2, rows: 1 })).toEqual(JITTERED);
+    expect(new RNG(1234).inTriangle([0, 0], [1, 0], [0, 1])).toEqual(TRIANGLE);
+    expect(
+      new RNG(1234).inPolygon([
+        [0, 0],
+        [1, 0],
+        [1, 0.5],
+        [0.5, 0.5],
+        [0.5, 1],
+        [0, 1],
+      ]),
+    ).toEqual(POLYGON);
+    expect(new RNG(1234).inAnnulus({ inner: 0.5 })).toEqual(ANNULUS);
+    const simplex = new RNG(1234).simplexNoise();
+    expect([simplex.at(0.3), simplex.at(0.3, 1.7), simplex.at(0.3, 1.7, 2.9)]).toEqual(SIMPLEX);
+    const draw = new RNG(1234).weightedSampler([
+      [5, "a"],
+      [3, "b"],
+      [2, "c"],
+    ]);
+    expect(collect(8, draw)).toEqual(WEIGHTED_SAMPLER);
+    expect(new RNG(1234).reservoirSample(3, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])).toEqual(RESERVOIR);
+
+    const varying = new RNG(1234).poissonDiskPoints({
+      minDist: ([x]) => 0.05 + 0.1 * x,
+      maxDist: 0.15,
+    });
+    expect([varying.length, varying[varying.length - 1]]).toEqual(POISSON_VARYING);
+    const shaped = new RNG(1234).poissonDiskPoints({
+      minDist: 0.1,
+      contains: ([x, y]) => (x - 0.5) ** 2 + (y - 0.5) ** 2 < 0.16,
+    });
+    expect([shaped.length, shaped[shaped.length - 1]]).toEqual(POISSON_SHAPED);
+  });
 });
 
 // The recorded values themselves, kept at the end so the tests read first.
@@ -245,3 +286,27 @@ const JSON_FRESH = "BdoJ48gZ1ZtXbRYS2XPecRQFe373Z4FP";
 const JSON_ADVANCED = "BdoJ48gZ1ZtOPTsYtlKKxRQFe373Z4FP";
 const STREAM = [0.21704127257012495, 0.9720315390785176, 0.42661575236012916, 0.024517535382690858];
 const FORK = [0.878260038485517, 0.04846660843087536, 0.7077035755841997, 0.05290566401459673];
+const SKIP = 137420005;
+const VON_MISES = [1.6313885234270729, 0.5743103345969481, 1.053378064651965, 1.208152529719033];
+const QUASI_R2 = [
+  [0.29517101053138095, 0.38746455017885983],
+  [0.0500486767780739, 0.9573048411769132],
+  [0.804926343024766, 0.5271451321749661],
+];
+const QUASI_HALTON = [
+  [0.040293344284688226, 0.15095759251413998],
+  [0.7902933442846882, 0.48429092584747346],
+  [0.2902933442846882, 0.9287353702919179],
+];
+const JITTERED = [
+  [0.2701466721423441, 0.8176242591808067],
+  [0.5733794154646129, 0.4101676470682116],
+];
+const TRIANGLE = [0.4597066557153118, 0.18237574081919328];
+const POLYGON = [0.14675883092922581, 0.4101676470682116];
+const ANNULUS = [0.333678904086038, -0.7374811164914373];
+const SIMPLEX = [0.29990132865, -0.07399219660081796, -0.25093663973662683];
+const WEIGHTED_SAMPLER = ["b", "c", "a", "b", "b", "b", "a", "b"];
+const RESERVOIR = [10, 2, 7];
+const POISSON_VARYING = [92, [0.01743878108362449, 0.21435821015004158]];
+const POISSON_SHAPED = [34, [0.3035172467074013, 0.162191873502898]];

@@ -18,6 +18,7 @@ import {
   studentT,
   triangular,
   truncatedGaussian,
+  vonMises,
   weibull,
   zipf,
 } from "../distributions.js";
@@ -829,5 +830,72 @@ describe("truncatedGaussian", () => {
     expect(collect(20, () => a.truncatedGaussian(config))).toEqual(
       collect(20, () => truncatedGaussian(b.random, config)),
     );
+  });
+});
+
+/** I1(κ) / I0(κ), the expected resultant length, by series. */
+const besselRatio = (kappa: number) => {
+  let i0 = 0;
+  let i1 = 0;
+  let term = 1;
+  for (let k = 0; k < 60; k++) {
+    if (k > 0) term *= (kappa / 2) ** 2 / (k * k);
+    i0 += term;
+    i1 += (term * (kappa / 2)) / (k + 1);
+  }
+  return i1 / i0;
+};
+
+describe("vonMises", () => {
+  /** The mean of cos(θ - mean): how tightly the angles cluster, from 0 to 1. */
+  const resultantLength = (angles: number[], about: number) =>
+    mean(angles.map((a) => Math.cos(a - about)));
+
+  it("clusters about the mean as tightly as kappa says", () => {
+    for (const kappa of [0.5, 2, 10]) {
+      const rng = seeded();
+      const angles = collect(40000, () => rng.vonMises({ mean: 1, kappa }));
+      expect(resultantLength(angles, 1)).toBeCloseTo(besselRatio(kappa), 2);
+    }
+  });
+
+  it("stays within π either side of the mean", () => {
+    const rng = seeded();
+    for (const a of collect(5000, () => rng.vonMises({ mean: 2, kappa: 0.3 }))) {
+      expect(a).toBeGreaterThanOrEqual(2 - Math.PI);
+      expect(a).toBeLessThanOrEqual(2 + Math.PI);
+    }
+  });
+
+  it("is symmetric about the mean", () => {
+    const rng = seeded();
+    const angles = collect(20000, () => rng.vonMises({ mean: -1, kappa: 3 }));
+    expect(mean(angles.map((a) => Math.sin(a + 1)))).toBeCloseTo(0, 1);
+    expect(mean(angles)).toBeCloseTo(-1, 1);
+  });
+
+  it("approaches a gaussian with sd 1 / sqrt(kappa) when concentrated", () => {
+    const rng = seeded();
+    const angles = collect(20000, () => rng.vonMises({ kappa: 100 }));
+    expect(sd(angles)).toBeCloseTo(0.1, 2);
+  });
+
+  it("is uniform round the circle at kappa 0", () => {
+    const rng = seeded();
+    const angles = collect(20000, () => rng.vonMises({ kappa: 0 }));
+    expect(resultantLength(angles, 0)).toBeCloseTo(0, 1);
+    expect(quantile(angles, 0.25)).toBeCloseTo(-Math.PI / 2, 1);
+  });
+
+  it("defaults to mean 0 and kappa 1", () => {
+    expect(seeded().vonMises()).toBe(seeded().vonMises({ mean: 0, kappa: 1 }));
+  });
+
+  it("matches the standalone function", () => {
+    expect(seeded().vonMises({ kappa: 4 })).toBe(vonMises(seeded().random, { kappa: 4 }));
+  });
+
+  it("rejects a negative kappa", () => {
+    expect(() => seeded().vonMises({ kappa: -1 })).toThrow("kappa must not be negative");
   });
 });

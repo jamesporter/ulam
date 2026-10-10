@@ -2,13 +2,17 @@
 
 Seeded random number generation for generative art.
 
+**[Documentation →](https://ulam-prng.pages.dev/)** — guides, live
+visualisations of every distribution, and the full API reference.
+
 A PCG generator with excellent statistical properties, plus the higher level
 randomness you actually reach for when drawing: weighted choices, sampling,
 shuffling, a shelf of distributions from gaussian to Pareto, random vectors
-and directions, perturbed points, Poisson disk distributions, coherent noise
-and random walks — all from one seed, so the same seed always draws the same
-picture. Seed it with a string, split it into independent streams so the parts
-of a sketch stop disturbing each other, and save its exact position in a URL.
+and directions, points inside shapes, Poisson disk and quasi-random spreads,
+coherent noise and random walks — all from one seed, so the same seed always
+draws the same picture. Seed it with a string, split it into independent
+streams so the parts of a sketch stop disturbing each other, jump around its
+sequence, and save its exact position in a URL.
 
 Initially extracted from [solandra](https://github.com/jamesporter/solandra) though may diverge in future.
 
@@ -71,6 +75,15 @@ rng.seed(42); // Re-seed in place, keeping references valid
 const state = rng.getState(); // [number, number, number, number]
 rng.number();
 rng.setState(state); // Rewind exactly
+```
+
+`skip(n)` jumps `n` draws along the sequence without making them, in time
+proportional to `log n`, and a negative `n` jumps back. A draw is one call to
+`next()`; `number()` takes two.
+
+```ts
+rng.skip(1_000_000); // As if next() had been called a million times
+rng.skip(-2).next(); // The draw before last, again
 ```
 
 ## Streams
@@ -165,6 +178,7 @@ The continuous ones:
 | `chiSquared(df)`                  | Sum of `df` squared normals                              |
 | `studentT(df)`                    | A gaussian with heavier tails                            |
 | `truncatedGaussian({ min, max })` | Normal, confined to bounds rather than clamped to them   |
+| `vonMises({ mean, kappa })`       | An angle clustered about a heading; a circular gaussian  |
 | `dirichlet(alpha)`                | Shares of a whole, one per concentration, summing to one |
 
 And the discrete ones:
@@ -215,6 +229,15 @@ rng.zipf({ n: 100 }); // Mostly 1 and 2, occasionally far down the list
 rng.zipf({ n: 100, exponent: 2 }); // Falls away faster still
 ```
 
+`vonMises` is the gaussian for things that wrap round: headings, orientations,
+hue offsets. `kappa` is the concentration — 0 gives any direction at all, and
+larger values bunch the angles ever tighter about `mean`:
+
+```ts
+rng.vonMises({ mean: Math.PI / 2, kappa: 4 }); // Mostly pointing up
+rng.vonMises({ kappa: 0 }); // Any direction
+```
+
 Every one of these is exported as a standalone function too, taking any source
 of uniform randomness as its first argument:
 
@@ -234,6 +257,23 @@ rng.uniformGridPoint({ minX: 0, maxX: 9, minY: 0, maxY: 9 }); // Integer coordin
 rng.perturb({ at: [0.5, 0.5] }); // Nudge by ±0.05 on each axis
 rng.perturb({ at: [0.5, 0.5], magnitude: 1 }); // Nudge by ±0.5
 ```
+
+Uniformly random points inside shapes, all uniform by area:
+
+```ts
+rng.inTriangle([0, 0], [1, 0], [0.5, 1]); // Always two draws
+rng.inPolygon([
+  [0, 0],
+  [1, 0],
+  [1, 1],
+  [0.5, 0.4],
+  [0, 1],
+]); // Convex or not
+rng.inAnnulus({ inner: 0.8 }); // A ring just inside the unit circle
+```
+
+`pointInPolygon(point, vertices)` is exported alongside them, as the test to
+hand Poisson disk sampling when it should fill a shape.
 
 ## Vectors
 
@@ -289,6 +329,21 @@ rng.weightedSample([
   [3, "square"],
   [2, "triangle"],
 ]); // Values in proportion to their weights
+
+rng.reservoirSample(10, readLines()); // Ten items from any iterable, in one pass
+```
+
+When the weights are fixed and you draw from them thousands of times,
+`weightedSampler` builds an alias table once, after which each draw costs the
+same however many values there are:
+
+```ts
+const colour = rng.weightedSampler([
+  [5, "ink"],
+  [3, "rust"],
+  [1, "gold"],
+]);
+for (const p of points) drawDot(p, colour());
 ```
 
 ### Without replacement
@@ -375,6 +430,39 @@ rng.forPoissonDiskPoints({ minDist: 0.05, height: 0.75 }, ([x, y], i) => {
 `width` and `height` default to 1, and `attempts` (how hard the sampler tries
 to place each point, so how tightly it packs) defaults to 30.
 
+`minDist` can be a function of position, for density that varies across the
+canvas: neighbours keep the average of their two spacings apart, and `maxDist`
+says how large the function can get. `contains` confines the points to a
+shape, including shapes in several separate pieces:
+
+```ts
+const noise = rng.simplexNoise();
+
+rng.poissonDiskPoints({
+  minDist: ([x, y]) => 0.01 + 0.02 * (noise.at(x * 3, y * 3) + 1),
+  maxDist: 0.05,
+});
+
+rng.poissonDiskPoints({
+  minDist: 0.02,
+  contains: (p) => pointInPolygon(p, outline),
+});
+```
+
+For cheaper even spreads, a jittered grid puts one random point in every cell,
+and a quasi-random (low discrepancy) sequence fills the region in an order that
+never leaves a gap:
+
+```ts
+rng.jitteredGridPoints({ columns: 20 }); // 400 points, one per cell
+rng.jitteredGridPoints({ columns: 20, jitter: 0.3 }); // A grid, roughened
+rng.quasiRandomPoints({ n: 400 }); // Roberts' R2 sequence
+rng.quasiRandomPoints({ n: 400, sequence: "halton" }); // The classic
+```
+
+The quasi-random sequences are fixed, randomised by one offset shared by every
+point, so they cost two draws however many points you take.
+
 The underlying implementation of Bridson's algorithm is exported too, if you
 want to drive it from some other source of randomness:
 
@@ -399,6 +487,7 @@ a height, a hue, an angle, a width.
 
 ```ts
 const noise = rng.perlinNoise(); // Gradient noise, the classic
+const even = rng.simplexNoise(); // Perlin's successor: no grid-aligned streaks
 const soft = rng.valueNoise(); // Blobbier, and cheaper
 
 noise.at(x * 4); // -1 to 1
@@ -419,12 +508,12 @@ const hills = noise.fbm({ octaves: 6, lacunarity: 2, gain: 0.5 });
 hills.at(x, y); // Detail at every scale, still -1 to 1
 ```
 
-Both are exported standalone as well, taking a source of randomness first:
+All three are exported standalone as well, taking a source of randomness first:
 
 ```ts
-import { perlinNoise, valueNoise } from "ulam-prng";
+import { perlinNoise, simplexNoise, valueNoise } from "ulam-prng";
 
-perlinNoise(Math.random).at(0.5, 0.5);
+simplexNoise(Math.random).at(0.5, 0.5);
 ```
 
 ## Random walks
@@ -448,6 +537,14 @@ one point longer than the number of steps, since it includes where it began.
 rng.walk({ steps: 500, momentum: 0.97, drift: [0.5, 0] }); // A wandering current
 rng.walk({ steps: 50, heading: 0 }); // Sets off due east
 ```
+
+## Documentation
+
+The full documentation lives at
+**[ulam-prng.pages.dev](https://ulam-prng.pages.dev/)**: a guide to each part of
+the library with interactive examples, an explorer for every distribution, the
+[API reference](https://ulam-prng.pages.dev/api) and the
+[release notes](https://ulam-prng.pages.dev/releases).
 
 ## Development
 

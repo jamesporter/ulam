@@ -65,3 +65,52 @@ export const MUL_LO = 0x4c957f2d >>> 0;
 export const BIT_53 = 9007199254740992.0;
 /** 2^27, the high half of those 53 bits. @internal */
 export const BIT_27 = 134217728.0;
+
+/**
+ * Advance a PCG state by `delta` steps of its LCG in O(log delta), storing the
+ * result back in `state`. `delta` is an unsigned 64-bit count given in halves,
+ * so stepping by `2^64 - n` steps back by `n`.
+ *
+ * The closed form for repeated LCG steps, from Brown's "Random Number
+ * Generation with Arbitrary Strides": square the multiplier and fold the
+ * increment along with it, once per bit of `delta`.
+ * @internal
+ */
+export function advance(state: Int32Array, deltaHi: number, deltaLo: number): void {
+  const tmp = new Int32Array(2);
+  let accMulHi = 0;
+  let accMulLo = 1;
+  let accPlusHi = 0;
+  let accPlusLo = 0;
+  let curMulHi = MUL_HI;
+  let curMulLo = MUL_LO;
+  let curPlusHi = state[2] >>> 0;
+  let curPlusLo = state[3] >>> 0;
+  let hi = deltaHi >>> 0;
+  let lo = deltaLo >>> 0;
+
+  while (hi !== 0 || lo !== 0) {
+    if (lo & 1) {
+      mul64(tmp, accMulHi, accMulLo, curMulHi, curMulLo);
+      accMulHi = tmp[0] >>> 0;
+      accMulLo = tmp[1] >>> 0;
+      mul64(tmp, accPlusHi, accPlusLo, curMulHi, curMulLo);
+      add64(tmp, tmp[0] >>> 0, tmp[1] >>> 0, curPlusHi, curPlusLo);
+      accPlusHi = tmp[0] >>> 0;
+      accPlusLo = tmp[1] >>> 0;
+    }
+    add64(tmp, curMulHi, curMulLo, 0, 1);
+    mul64(tmp, tmp[0] >>> 0, tmp[1] >>> 0, curPlusHi, curPlusLo);
+    curPlusHi = tmp[0] >>> 0;
+    curPlusLo = tmp[1] >>> 0;
+    mul64(tmp, curMulHi, curMulLo, curMulHi, curMulLo);
+    curMulHi = tmp[0] >>> 0;
+    curMulLo = tmp[1] >>> 0;
+
+    lo = ((lo >>> 1) | (hi << 31)) >>> 0;
+    hi = hi >>> 1;
+  }
+
+  mul64(tmp, accMulHi, accMulLo, state[0] >>> 0, state[1] >>> 0);
+  add64(state, tmp[0] >>> 0, tmp[1] >>> 0, accPlusHi, accPlusLo);
+}

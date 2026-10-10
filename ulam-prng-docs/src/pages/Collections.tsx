@@ -1,6 +1,6 @@
 import { ApiEntryCard } from '@/components/docs/ApiEntryCard'
 import { CodeBlock } from '@/components/docs/CodeBlock'
-import { Callout, H2, P, PageHeader } from '@/components/docs/Prose'
+import { Callout, H2, H3, P, PageHeader } from '@/components/docs/Prose'
 import { BagDemo, ShuffleDemo, WeightedDemo } from '@/components/viz/CollectionsDemos'
 import { entry } from '@/content/api'
 
@@ -8,8 +8,8 @@ export function Collections() {
   return (
     <>
       <PageHeader eyebrow="Randomness" title="Collections">
-        Choosing from arrays: one element or several, weighted or not, shuffled in place or copied, and drawn with or
-        without replacement.
+        Choosing from arrays: one element or several, weighted or not, shuffled in place or copied, drawn with or
+        without replacement, and sampled from streams of any length.
       </PageHeader>
 
       <CodeBlock
@@ -34,6 +34,22 @@ rng.weightedSample([
         [`categorical`](/docs/distributions/categorical); to run a function, [`proportionately`](/docs/choosing#proportionately).
       </P>
       <WeightedDemo />
+      <H3 id="weighted-sampler">Drawing from the same weights many times</H3>
+      <P>
+        `weightedSample` looks through the weights on every call, which is fine for a handful of values. When the weights
+        are fixed and you draw from them thousands of times — a palette for every dot, a tile for every cell —
+        `weightedSampler` prepares an alias table once, after which every draw is one uniform number and a lookup,
+        however many values there are.
+      </P>
+      <CodeBlock
+        code={`const colour = rng.weightedSampler([
+  [5, "ink"],
+  [3, "rust"],
+  [1, "gold"],
+])
+
+for (const p of points) drawDot(p, colour()) // Constant time per draw`}
+      />
 
       <H2 id="without-replacement">Without replacement</H2>
       <P>
@@ -58,6 +74,20 @@ rng.samplesWithoutReplacement(3, [...deck]) // Leaves deck alone`}
         your collection untouched.
       </Callout>
 
+      <H2 id="reservoir">From a stream of unknown length</H2>
+      <P>
+        `reservoirSample(k, items)` chooses `k` items uniformly from anything iterable — an array, a set, a string, a
+        generator — in a single pass, never holding more than `k` at once and never needing to know the length up front.
+      </P>
+      <CodeBlock
+        code={`rng.reservoirSample(3, new Set(words)) // Three distinct words
+rng.reservoirSample(10, readLines()) // Ten lines from a generator of any length`}
+      />
+      <P>
+        Every set of `k` items is equally likely to be chosen, but they come back in the order the reservoir holds them,
+        which is not itself random: `shuffle` the result if order matters.
+      </P>
+
       <H2 id="api">API</H2>
       {[
         'sample',
@@ -65,10 +95,12 @@ rng.samplesWithoutReplacement(3, [...deck]) // Leaves deck alone`}
         'shuffle',
         'shuffled',
         'weightedSample',
+        'weightedSampler',
         'sampleWithoutReplacement',
         'samplesWithoutReplacement',
         'sampleWithoutReplacementWithCounts',
         'samplesWithoutReplacementWithCounts',
+        'reservoirSample',
       ].map((id) => (
         <ApiEntryCard key={id} entry={entry(id)} />
       ))}

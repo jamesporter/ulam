@@ -89,6 +89,23 @@ rng.setState(state) // Rewind exactly`,
     since: '0.1.0',
     page: '/docs/seeding',
   }),
+  m({
+    id: 'skip',
+    name: 'skip',
+    signature: 'skip(n: number): this',
+    summary:
+      'Jumps `n` draws along the sequence without making them, in time proportional to `log n`. A negative `n` jumps back.',
+    details: [
+      'A draw is one call to `next()`. `number()` makes two, so to skip a thousand `number()`s, skip two thousand.',
+      'The seed is untouched, so streams are unaffected; and the jump is exact, so `skip(n)` then `skip(-n)` is right back where it started.',
+    ],
+    returns: 'The same generator, for chaining.',
+    throws: ['if `n` is not a safe integer'],
+    example: `rng.skip(1_000_000) // As if next() had been called a million times
+rng.skip(-2).next() // The draw before last, again`,
+    since: '0.5.0',
+    page: '/docs/seeding',
+  }),
   {
     id: 'hashSeed',
     name: 'hashSeed',
@@ -264,7 +281,9 @@ const distributionEntries: ApiEntry[] = distributions.map((d) =>
       ? '0.1.0'
       : ['dirichlet', 'zipf', 'truncatedGaussian'].includes(d.method)
         ? '0.4.0'
-        : '0.2.0',
+        : d.method === 'vonMises'
+          ? '0.5.0'
+          : '0.2.0',
     page: `/docs/distributions/${d.id}`,
   }),
 )
@@ -311,19 +330,38 @@ rng.perturb({ at: [0.5, 0.5], magnitude: 1 }) // Nudge by ±0.5`,
   m({
     id: 'poissonDiskPoints',
     name: 'poissonDiskPoints',
-    signature: 'poissonDiskPoints(config: { minDist: number; width?: number; height?: number; attempts?: number }): Point2D[]',
+    signature:
+      'poissonDiskPoints(config: { minDist: PoissonDiskSpacing; maxDist?: number; contains?: (at: Point2D) => boolean; width?: number; height?: number; attempts?: number }): Point2D[]',
     summary:
       'Points scattered at random but never closer together than `minDist`: far more even, and far better looking, than uniform placement.',
+    details: [
+      'Since 0.5.0, `minDist` can be a function of position, for density that varies across the canvas; neighbours then keep the average of their two spacings apart, and `maxDist` must say how large the function can get.',
+      'Also since 0.5.0, `contains` confines the points to a shape. The sampler restarts from fresh random places when it runs out of room, so separate islands of the shape are filled too.',
+    ],
     params: [
-      { name: 'minDist', type: 'number', description: 'The closest any two points may be' },
+      { name: 'minDist', type: 'number | (at: Point2D) => number', description: 'The closest any two points may be, or a function giving it at each point' },
+      { name: 'maxDist', type: 'number', description: 'The largest a `minDist` function can give; required with one, and larger values are capped at it' },
+      { name: 'contains', type: '(at: Point2D) => boolean', default: 'everywhere', description: 'Which places in the region to fill' },
       { name: 'width', type: 'number', default: '1', description: 'Width of the region' },
       { name: 'height', type: 'number', default: '1', description: 'Height of the region' },
       { name: 'attempts', type: 'number', default: '30', description: 'Tries to place each new point; higher packs tighter' },
     ],
-    throws: ['if the width, height or `minDist` is not positive'],
+    throws: [
+      'if the width, height or spacing is not positive',
+      'if `minDist` is a function and `maxDist` is missing',
+    ],
     example: `for (const [x, y] of rng.poissonDiskPoints({ minDist: 0.05 })) {
   drawDot(x, y)
-}`,
+}
+
+// Dense on the left, sparse on the right
+rng.poissonDiskPoints({ minDist: ([x]) => 0.01 + 0.05 * x, maxDist: 0.06 })
+
+// Only inside a circle
+rng.poissonDiskPoints({
+  minDist: 0.03,
+  contains: ([x, y]) => (x - 0.5) ** 2 + (y - 0.5) ** 2 < 0.16,
+})`,
     since: '0.1.0',
     page: '/docs/points',
   }),
@@ -331,7 +369,7 @@ rng.perturb({ at: [0.5, 0.5], magnitude: 1 }) // Nudge by ±0.5`,
     id: 'forPoissonDiskPoints',
     name: 'forPoissonDiskPoints',
     signature:
-      'forPoissonDiskPoints(config: { minDist: number; width?: number; height?: number; attempts?: number }, callback: (at: Point2D, i: number) => void): void',
+      'forPoissonDiskPoints(config: { minDist: PoissonDiskSpacing; maxDist?: number; contains?: (at: Point2D) => boolean; width?: number; height?: number; attempts?: number }, callback: (at: Point2D, i: number) => void): void',
     summary: 'Runs a callback for each Poisson disk point, with its index.',
     example: `rng.forPoissonDiskPoints({ minDist: 0.05, height: 0.75 }, ([x, y], i) => {
   drawDot(x, y, i)
@@ -339,6 +377,100 @@ rng.perturb({ at: [0.5, 0.5], magnitude: 1 }) // Nudge by ±0.5`,
     since: '0.1.0',
     page: '/docs/points',
   }),
+  m({
+    id: 'quasiRandomPoints',
+    name: 'quasiRandomPoints',
+    signature: 'quasiRandomPoints(config: QuasiRandomConfig): Point2D[]',
+    summary:
+      'A low discrepancy sequence: points that spread out as evenly as they can however many you take, so they never clump or leave gaps — at a fraction of the cost of Poisson disk sampling.',
+    details: [
+      '`"r2"` (the default) is Roberts’ sequence on the plastic number, the most even of the simple ones. `"halton"` is the classic, mirroring the digits of the index in bases 2 and 3.',
+      'The sequences themselves are fixed; the randomness is one offset shared by every point, wrapping round the region. So it costs exactly two draws whatever `n` is, each seed gives a different set, and asking for more points only adds to the end.',
+    ],
+    params: [
+      { name: 'n', type: 'number', description: 'How many points' },
+      { name: 'width', type: 'number', default: '1', description: 'Width of the region' },
+      { name: 'height', type: 'number', default: '1', description: 'Height of the region' },
+      { name: 'sequence', type: '"r2" | "halton"', default: '"r2"', description: 'Which sequence to follow' },
+    ],
+    throws: ['if `n` is not a non-negative integer', 'if the width or height is not positive'],
+    example: `rng.quasiRandomPoints({ n: 500 })
+rng.quasiRandomPoints({ n: 500, sequence: "halton", height: 0.75 })`,
+    since: '0.5.0',
+    page: '/docs/points',
+  }),
+  m({
+    id: 'jitteredGridPoints',
+    name: 'jitteredGridPoints',
+    signature: 'jitteredGridPoints(config: JitteredGridConfig): Point2D[]',
+    summary:
+      'One random point in every cell of a grid: stratified sampling. Far more even than uniform points at the same cost, and with `jitter` it slides all the way to a regular grid.',
+    details: ['Points come back a row at a time, from the top left, two draws each.'],
+    params: [
+      { name: 'columns', type: 'number', description: 'How many cells across' },
+      { name: 'rows', type: 'number', default: 'square cells', description: 'How many cells down; by default, as many as keep the cells square' },
+      { name: 'width', type: 'number', default: '1', description: 'Width of the region' },
+      { name: 'height', type: 'number', default: '1', description: 'Height of the region' },
+      { name: 'jitter', type: 'number', default: '1', description: 'How far a point may stray from its cell’s centre, from 0 (a regular grid) to 1 (anywhere in the cell)' },
+    ],
+    throws: [
+      'if `columns` or `rows` is not a positive integer',
+      'if the width or height is not positive',
+      'if `jitter` is outside `[0, 1]`',
+    ],
+    example: `rng.jitteredGridPoints({ columns: 20 }) // 400 points
+rng.jitteredGridPoints({ columns: 20, jitter: 0.3 }) // A grid, roughened`,
+    since: '0.5.0',
+    page: '/docs/points',
+  }),
+  m({
+    id: 'inTriangle',
+    name: 'inTriangle',
+    signature: 'inTriangle(a: Vec2, b: Vec2, c: Vec2): Vec2',
+    summary: 'A uniformly random point inside a triangle. Exactly two draws, by folding a parallelogram in half.',
+    example: `rng.inTriangle([0, 0], [1, 0], [0.5, 1])`,
+    since: '0.5.0',
+    page: '/docs/points',
+  }),
+  m({
+    id: 'inPolygon',
+    name: 'inPolygon',
+    signature: 'inPolygon(vertices: Vec2[]): Vec2',
+    summary:
+      'A uniformly random point inside a polygon, convex or not, given its corners in order. Rejection sampled from the bounding box, so thin shapes take more draws than fat ones.',
+    throws: ['if there are fewer than three vertices', 'if the polygon has no area'],
+    example: `rng.inPolygon([[0, 0], [1, 0], [1, 1], [0.5, 0.4], [0, 1]])`,
+    since: '0.5.0',
+    page: '/docs/points',
+  }),
+  m({
+    id: 'inAnnulus',
+    name: 'inAnnulus',
+    signature: 'inAnnulus(config: { inner: number; outer?: number }): Vec2',
+    summary: 'A uniformly random point in a ring about the origin, between radii `inner` and `outer`. Uniform by area, so the outer edge gets its fair share.',
+    params: [
+      { name: 'inner', type: 'number', description: 'Radius of the hole' },
+      { name: 'outer', type: 'number', default: '1', description: 'Radius of the outer edge' },
+    ],
+    throws: ['if `inner` is negative', 'if `inner` is larger than `outer`'],
+    example: `rng.inAnnulus({ inner: 0.8 }) // Just inside the unit circle
+rng.inAnnulus({ inner: 2, outer: 3 })`,
+    since: '0.5.0',
+    page: '/docs/points',
+  }),
+  {
+    id: 'pointInPolygon',
+    name: 'pointInPolygon',
+    kind: 'function',
+    signature: 'pointInPolygon(point: Vec2, vertices: Vec2[]): boolean',
+    summary:
+      'Whether a point is inside a polygon, by the even-odd rule. Not random at all, but exactly the `contains` test Poisson disk sampling inside a shape wants.',
+    example: `import { pointInPolygon } from "ulam-prng"
+
+rng.poissonDiskPoints({ minDist: 0.02, contains: (p) => pointInPolygon(p, outline) })`,
+    since: '0.5.0',
+    page: '/docs/points',
+  },
 ]
 
 const vectors: ApiEntry[] = [
@@ -501,6 +633,25 @@ const collections: ApiEntry[] = [
     page: '/docs/collections',
   }),
   m({
+    id: 'weightedSampler',
+    name: 'weightedSampler',
+    signature: 'weightedSampler<T>(cases: [number, T][]): () => T',
+    summary:
+      'A sampler for `[weight, value]` pairs, prepared once and then drawn from at constant cost, however many values there are.',
+    details: [
+      'Where `weightedSample` walks the weights on every call, this builds Vose’s alias table up front; each draw after that is one uniform number and a lookup. The sampler draws from this generator at the moment you call it.',
+    ],
+    throws: ['if there are no cases, a weight is negative, or the weights do not sum to something positive'],
+    example: `const colour = rng.weightedSampler([
+  [5, "ink"],
+  [3, "rust"],
+  [1, "gold"],
+])
+for (const p of points) draw(p, colour())`,
+    since: '0.5.0',
+    page: '/docs/collections',
+  }),
+  m({
     id: 'sampleWithoutReplacement',
     name: 'sampleWithoutReplacement',
     signature: 'sampleWithoutReplacement<T>(from: T[]): T',
@@ -546,6 +697,21 @@ rng.samplesWithoutReplacementWithCounts(6, [
   [1, "triangle"],
 ])`,
     since: '0.4.0',
+    page: '/docs/collections',
+  }),
+  m({
+    id: 'reservoirSample',
+    name: 'reservoirSample',
+    signature: 'reservoirSample<T>(k: number, items: Iterable<T>): T[]',
+    summary:
+      '`k` items chosen uniformly from any iterable — an array, a set, a generator — in one pass, without knowing its length and without holding more than `k` items at once.',
+    details: [
+      'Every set of `k` items is equally likely. They come back in the order the reservoir holds them, which is not itself random, so `shuffle` them if order matters. Fewer than `k` items gives all of them. One draw per item after the first `k`.',
+    ],
+    throws: ['if `k` is not a non-negative integer'],
+    example: `rng.reservoirSample(10, lines()) // Ten lines from a stream of any length
+rng.reservoirSample(3, new Set(words))`,
+    since: '0.5.0',
     page: '/docs/collections',
   }),
 ]
@@ -602,6 +768,18 @@ const noise: ApiEntry[] = [
 noise.at(x * 3, y * 3) // A landscape
 noise.at(x * 3, y * 3, t) // The third dimension as time`,
     since: '0.4.0',
+    page: '/docs/noise',
+  }),
+  m({
+    id: 'simplexNoise',
+    name: 'simplexNoise',
+    signature: 'simplexNoise(): NoiseField',
+    summary:
+      'A seeded field of simplex noise: Perlin’s successor to his own gradient noise, built on triangles rather than squares. It looks the same in every direction, with none of the grid-aligned streaks Perlin noise can show.',
+    example: `const noise = rng.simplexNoise()
+noise.at(x * 3, y * 3, t)
+noise.fbm({ octaves: 5 }).at(x, y)`,
+    since: '0.5.0',
     page: '/docs/noise',
   }),
   m({
@@ -703,10 +881,16 @@ const standalone: ApiEntry[] = [
   fn('perturbVec3', 'perturbVec3(rng: RandomSource, config: { at: Vec3; magnitude?: number }): Vec3', 'The standalone form of [`rng.perturbVec3`](/docs/vectors#perturbVec3).', '0.2.0'),
   fn('perlinNoise', 'perlinNoise(rng: RandomSource): NoiseField', 'The standalone form of [`rng.perlinNoise`](/docs/noise#perlinNoise).', '0.4.0'),
   fn('valueNoise', 'valueNoise(rng: RandomSource): NoiseField', 'The standalone form of [`rng.valueNoise`](/docs/noise#valueNoise).', '0.4.0'),
+  fn('simplexNoise', 'simplexNoise(rng: RandomSource): NoiseField', 'The standalone form of [`rng.simplexNoise`](/docs/noise#simplexNoise).', '0.5.0'),
+  fn('inTriangle', 'inTriangle(rng: RandomSource, a: Vec2, b: Vec2, c: Vec2): Vec2', 'The standalone form of [`rng.inTriangle`](/docs/points#inTriangle).', '0.5.0'),
+  fn('inPolygon', 'inPolygon(rng: RandomSource, vertices: Vec2[]): Vec2', 'The standalone form of [`rng.inPolygon`](/docs/points#inPolygon).', '0.5.0'),
+  fn('inAnnulus', 'inAnnulus(rng: RandomSource, config: { inner: number; outer?: number }): Vec2', 'The standalone form of [`rng.inAnnulus`](/docs/points#inAnnulus).', '0.5.0'),
+  fn('quasiRandomPoints', 'quasiRandomPoints(rng: RandomSource, config: QuasiRandomConfig): Point2D[]', 'The standalone form of [`rng.quasiRandomPoints`](/docs/points#quasiRandomPoints).', '0.5.0'),
+  fn('jitteredGridPoints', 'jitteredGridPoints(rng: RandomSource, config: JitteredGridConfig): Point2D[]', 'The standalone form of [`rng.jitteredGridPoints`](/docs/points#jitteredGridPoints).', '0.5.0'),
   fn('walk', 'walk(rng: RandomSource, config: WalkConfig): Vec2[]', 'The standalone form of [`rng.walk`](/docs/walks#walk).', '0.4.0'),
   fn(
     'poissonDiskPoints',
-    'poissonDiskPoints(config: { width: number; height: number; minDist: number; rng: () => number; k?: number }): Point2D[]',
+    'poissonDiskPoints(config: { width: number; height: number; minDist: PoissonDiskSpacing; maxDist?: number; contains?: (at: Point2D) => boolean; rng: () => number; k?: number }): Point2D[]',
     'Bridson’s Poisson disk sampling over a `width` × `height` region, driven by any `rng`. The standalone form of [`rng.poissonDiskPoints`](/docs/points#poissonDiskPoints); note that `k` is what the method calls `attempts`.',
     '0.1.0',
     {
@@ -719,10 +903,14 @@ poissonDiskPoints({ width: 1, height: 1, minDist: 0.05, rng: Math.random, k: 30 
     id: 'PoissonDiskSampling',
     name: 'PoissonDiskSampling',
     kind: 'class',
-    signature: 'new PoissonDiskSampling(width: number, height: number, minDist: number, k: number)',
+    signature:
+      'new PoissonDiskSampling(width: number, height: number, minDist: PoissonDiskSpacing, k: number, options?: PoissonDiskOptions)',
     summary:
       'The sampler behind `poissonDiskPoints`: Bridson’s algorithm with a background grid for fast neighbour checks. Call `generatePoints(rng)` to fill it; the result is also kept on `.points`.',
-    throws: ['if the width or height is not positive', 'if `minDist` is not positive'],
+    throws: [
+      'if the width or height is not positive',
+      'if `minDist` is not positive, or is a function without a positive `maxDist`',
+    ],
     example: `const sampler = new PoissonDiskSampling(1, 1, 0.05, 30)
 const points = sampler.generatePoints(rng.random)`,
     since: '0.1.0',
@@ -752,6 +940,11 @@ const types: ApiEntry[] = [
   t('GaussianVecConfig', 'type GaussianVecConfig<V> = { mean?: V; sd?: number }', 'Centre and spread for the gaussian vectors.', '0.2.0', '/docs/vectors'),
   t('NoiseField', 'type NoiseField = {\n  at(x: number, y?: number, z?: number): number\n  fbm(config?: FbmConfig): NoiseField\n}', 'A seeded noise field, sampled in one, two or three dimensions.', '0.4.0', '/docs/noise'),
   t('FbmConfig', 'type FbmConfig = { octaves?: number; lacunarity?: number; gain?: number }', 'How an fbm field stacks its octaves.', '0.4.0', '/docs/noise'),
+  t('PoissonDiskSpacing', 'type PoissonDiskSpacing = number | ((at: Point2D) => number)', 'One spacing for the whole region, or one that depends on where you are.', '0.5.0', '/docs/points'),
+  t('PoissonDiskOptions', 'type PoissonDiskOptions = {\n  maxDist?: number\n  contains?: (at: Point2D) => boolean\n}', 'The extras for `PoissonDiskSampling`: an upper bound on a varying spacing, and a shape to fill.', '0.5.0'),
+  t('QuasiRandomConfig', 'type QuasiRandomConfig = {\n  n: number\n  width?: number\n  height?: number\n  sequence?: QuasiRandomSequence\n}', 'Where and how many points `quasiRandomPoints` places.', '0.5.0', '/docs/points'),
+  t('QuasiRandomSequence', 'type QuasiRandomSequence = "r2" | "halton"', 'The low discrepancy sequences on offer.', '0.5.0', '/docs/points'),
+  t('JitteredGridConfig', 'type JitteredGridConfig = {\n  columns: number\n  rows?: number\n  width?: number\n  height?: number\n  jitter?: number\n}', 'The grid `jitteredGridPoints` fills.', '0.5.0', '/docs/points'),
   t('WalkConfig', 'type WalkConfig = {\n  steps: number\n  start?: Vec2\n  stepSize?: number\n  momentum?: number\n  drift?: Vec2\n  heading?: number\n}', 'How a walk wanders.', '0.4.0', '/docs/walks'),
 ]
 
@@ -760,8 +953,8 @@ export const apiGroups: ApiGroup[] = [
   { title: 'Streams', page: '/docs/streams', blurb: 'Independent generators from one seed.', entries: streams },
   { title: 'Serialisation', page: '/docs/serialisation', blurb: 'A generator as a short string, and back.', entries: serialisation },
   { title: 'Numbers', page: '/docs/numbers', blurb: 'The uniform core everything is built on.', entries: numbers },
-  { title: 'Distributions', page: '/docs/distributions', blurb: 'Twenty shapes of randomness, continuous and discrete.', entries: distributionEntries },
-  { title: 'Points', page: '/docs/points', blurb: 'Places on a canvas.', entries: points },
+  { title: 'Distributions', page: '/docs/distributions', blurb: 'Twenty-one shapes of randomness, continuous and discrete.', entries: distributionEntries },
+  { title: 'Points', page: '/docs/points', blurb: 'Places on a canvas, spread evenly, and inside shapes.', entries: points },
   { title: 'Vectors', page: '/docs/vectors', blurb: 'Vectors, directions, discs and balls.', entries: vectors },
   { title: 'Collections', page: '/docs/collections', blurb: 'Sampling, shuffling and drawing from arrays.', entries: collections },
   { title: 'Choosing what to do', page: '/docs/choosing', blurb: 'Randomness that runs code.', entries: choosing },

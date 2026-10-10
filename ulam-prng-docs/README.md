@@ -1,6 +1,7 @@
 # ulam-prng docs
 
-The documentation site for [ulam-prng](https://www.npmjs.com/package/ulam-prng):
+The documentation site for [ulam-prng](https://www.npmjs.com/package/ulam-prng),
+published at [ulam-prng.pages.dev](https://ulam-prng.pages.dev/):
 Vite, React, Tailwind CSS v4, shadcn/ui and React Router, with syntax
 highlighting by Shiki.
 

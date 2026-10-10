@@ -564,3 +564,48 @@ function normalQuantile(p: number): number {
   }
   return x;
 }
+
+/**
+ * Von Mises random angle: the circular counterpart of a gaussian, for angles
+ * that cluster around a heading. `kappa` is the concentration — at 0 every
+ * direction is equally likely, and as it grows the angles bunch ever tighter
+ * about `mean`, until it behaves like a gaussian with standard deviation
+ * `1 / sqrt(kappa)`.
+ *
+ * Unlike a gaussian draw taken as an angle, it wraps properly: it never prefers
+ * one side of the circle just because that is where the numbers start.
+ *
+ * Sampled by Best and Fisher's rejection method.
+ *
+ * @param config.mean - The heading the angles cluster about, in radians (default: 0)
+ * @param config.kappa - Concentration; larger is tighter (default: 1)
+ * @returns An angle in radians, within π either side of `mean`
+ * @throws Error if `kappa` is negative
+ * @example
+ * ```ts
+ * vonMises(Math.random, { mean: Math.PI / 2, kappa: 4 }) // Mostly pointing up
+ * vonMises(Math.random, { kappa: 0 }) // Any direction at all
+ * ```
+ */
+export function vonMises(rng: RandomSource, config?: { mean?: number; kappa?: number }): number {
+  const { mean = 0, kappa = 1 } = config ?? {};
+  if (kappa < 0) throw new Error("kappa must not be negative");
+  // So close to uniform that the rejection step would lose all its precision
+  if (kappa <= 1e-6) return mean + Math.PI * (2 * rng() - 1);
+
+  const s = 0.5 / kappa;
+  const r = s + Math.sqrt(1 + s * s);
+
+  let z: number;
+  for (;;) {
+    z = Math.cos(Math.PI * rng());
+    const d = z / (r + z);
+    const u = rng();
+    if (u < 1 - d * d || u <= (1 - d) * Math.exp(d)) break;
+  }
+
+  const q = 1 / r;
+  const f = (q + z) / (1 + q * z);
+  const theta = Math.acos(Math.max(-1, Math.min(1, f)));
+  return rng() < 0.5 ? mean + theta : mean - theta;
+}
