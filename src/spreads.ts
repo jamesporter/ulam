@@ -8,7 +8,7 @@
  * @module spreads
  */
 
-import type { Point2D, RandomSource } from "./types.js";
+import type { RandomSource, Vec2 } from "./types.js";
 
 /** The low discrepancy sequences {@link quasiRandomPoints} can follow. */
 export type QuasiRandomSequence = "r2" | "halton";
@@ -103,14 +103,14 @@ function radicalInverse(i: number, base: number): number {
  * quasiRandomPoints(Math.random, { n: 500, sequence: "halton", height: 0.75 })
  * ```
  */
-export function quasiRandomPoints(rng: RandomSource, config: QuasiRandomConfig): Point2D[] {
+export function quasiRandomPoints(rng: RandomSource, config: QuasiRandomConfig): Vec2[] {
   const { n, width = 1, height = 1, sequence = "r2" } = config;
   if (!Number.isInteger(n) || n < 0) throw new Error("n must be a non-negative integer");
   if (width <= 0 || height <= 0) throw new Error("Width and height must be positive");
 
   const ox = rng();
   const oy = rng();
-  const points: Point2D[] = [];
+  const points: Vec2[] = [];
 
   for (let i = 0; i < n; i++) {
     const u = sequence === "halton" ? radicalInverse(i + 1, 2) : (i + 1) * R2_A1;
@@ -141,7 +141,7 @@ export function quasiRandomPoints(rng: RandomSource, config: QuasiRandomConfig):
  * jitteredGridPoints(Math.random, { columns: 20, height: 0.5 }) // 20 × 10
  * ```
  */
-export function jitteredGridPoints(rng: RandomSource, config: JitteredGridConfig): Point2D[] {
+export function jitteredGridPoints(rng: RandomSource, config: JitteredGridConfig): Vec2[] {
   const { columns, width = 1, height = 1, jitter = 1 } = config;
   if (width <= 0 || height <= 0) throw new Error("Width and height must be positive");
   const rows = config.rows ?? Math.max(1, Math.round((columns * height) / width));
@@ -153,7 +153,7 @@ export function jitteredGridPoints(rng: RandomSource, config: JitteredGridConfig
 
   const cellWidth = width / columns;
   const cellHeight = height / rows;
-  const points: Point2D[] = [];
+  const points: Vec2[] = [];
 
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < columns; i++) {

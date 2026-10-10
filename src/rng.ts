@@ -30,7 +30,7 @@ import { poissonDiskPoints } from "./poissonDisk.js";
 import * as shapes from "./shapes.js";
 import type { JitteredGridConfig, QuasiRandomConfig } from "./spreads.js";
 import { jitteredGridPoints, quasiRandomPoints } from "./spreads.js";
-import type { Point2D, Vec2, Vec3, Vec4 } from "./types.js";
+import type { Vec2, Vec3, Vec4 } from "./types.js";
 import * as vectors from "./vectors.js";
 import type { WalkConfig } from "./walk.js";
 import { walk } from "./walk.js";
@@ -480,7 +480,7 @@ export class RNG {
     maxX: number;
     minY: number;
     maxY: number;
-  }): Point2D {
+  }): Vec2 {
     return [
       this.uniformRandomInt({ from: minX, to: maxX }),
       this.uniformRandomInt({ from: minY, to: maxY }),
@@ -498,7 +498,7 @@ export class RNG {
    * rng.randomPoint({ height: 1 / aspectRatio }) // A canvas of that shape
    * ```
    */
-  randomPoint(config?: { width?: number; height?: number }): Point2D {
+  randomPoint(config?: { width?: number; height?: number }): Vec2 {
     const { width = 1, height = 1 } = config ?? {};
     return [this.number() * width, this.number() * height];
   }
@@ -623,7 +623,7 @@ export class RNG {
    * -0.05 to 0.05; the optional magnitude scales this, e.g. magnitude 1 gives
    * perturbations of -0.5 to 0.5.
    */
-  perturb(config: { at: Point2D; magnitude?: number }): Point2D {
+  perturb(config: { at: Vec2; magnitude?: number }): Vec2 {
     return vectors.perturbVec2(this.random, config);
   }
 
@@ -775,11 +775,11 @@ export class RNG {
   poissonDiskPoints(config: {
     minDist: PoissonDiskSpacing;
     maxDist?: number;
-    contains?: (at: Point2D) => boolean;
+    contains?: (at: Vec2) => boolean;
     width?: number;
     height?: number;
     attempts?: number;
-  }): Point2D[] {
+  }): Vec2[] {
     const { minDist, maxDist, contains, width = 1, height = 1, attempts = 30 } = config;
     return poissonDiskPoints({
       width,
@@ -807,12 +807,12 @@ export class RNG {
     config: {
       minDist: PoissonDiskSpacing;
       maxDist?: number;
-      contains?: (at: Point2D) => boolean;
+      contains?: (at: Vec2) => boolean;
       width?: number;
       height?: number;
       attempts?: number;
     },
-    callback: (at: Point2D, i: number) => void,
+    callback: (at: Vec2, i: number) => void,
   ): void {
     this.poissonDiskPoints(config).forEach(callback);
   }
@@ -840,7 +840,7 @@ export class RNG {
    * rng.quasiRandomPoints({ n: 500, sequence: "halton", height: 0.75 })
    * ```
    */
-  quasiRandomPoints(config: QuasiRandomConfig): Point2D[] {
+  quasiRandomPoints(config: QuasiRandomConfig): Vec2[] {
     return quasiRandomPoints(this.random, config);
   }
 
@@ -864,7 +864,7 @@ export class RNG {
    * rng.jitteredGridPoints({ columns: 20, jitter: 0.3 }) // A grid, roughened
    * ```
    */
-  jitteredGridPoints(config: JitteredGridConfig): Point2D[] {
+  jitteredGridPoints(config: JitteredGridConfig): Vec2[] {
     return jitteredGridPoints(this.random, config);
   }
 

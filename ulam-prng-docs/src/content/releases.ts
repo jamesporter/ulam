@@ -17,6 +17,21 @@ export type Release = {
 /** The history of ulam-prng, newest first. */
 export const releases: Release[] = [
   {
+    version: '0.6.0',
+    date: '2026-10-10',
+    unpublished: true,
+    headline: 'In progress',
+    summary: 'Work towards the next release. Every existing seed draws exactly what it drew before.',
+    sections: [
+      {
+        title: 'Breaking',
+        items: [
+          '`Point2D` and `Vector2D` are gone: every signature uses `Vec2`, matching `Vec3` and `Vec4`. Both were plain aliases of `Vec2`, so replacing the name is the whole fix.',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.5.0',
     date: '2026-10-10',
     headline: 'Even spreads, shapes, simplex noise and jumping ahead',

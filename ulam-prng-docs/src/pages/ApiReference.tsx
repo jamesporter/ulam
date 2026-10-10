@@ -44,7 +44,7 @@ export function ApiReference() {
 } from "ulam-prng"
 
 import type {
-  RNGState, RandomSource, Vec2, Vec3, Vec4, Point2D, Vector2D,
+  RNGState, RandomSource, Vec2, Vec3, Vec4,
   UniformVecConfig, GaussianVecConfig, NoiseField, FbmConfig, WalkConfig,
 } from "ulam-prng"`}
       />

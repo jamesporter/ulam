@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { RNG } from "../rng.js";
 import { jitteredGridPoints, quasiRandomPoints } from "../spreads.js";
-import type { Point2D } from "../types.js";
+import type { Vec2 } from "../types.js";
 
 /**
  * How unevenly points fill a `cells` × `cells` grid over the unit square: the
@@ -9,14 +9,14 @@ import type { Point2D } from "../types.js";
  * Poisson process, so the variance is about the mean; evenly spread ones do
  * much better.
  */
-function countVariance(points: Point2D[], cells: number): number {
+function countVariance(points: Vec2[], cells: number): number {
   const counts = Array.from({ length: cells * cells }, () => 0);
   for (const [x, y] of points) counts[Math.floor(y * cells) * cells + Math.floor(x * cells)]++;
   const mean = points.length / counts.length;
   return counts.reduce((s, c) => s + (c - mean) ** 2, 0) / counts.length;
 }
 
-const inside = (points: Point2D[], width: number, height: number) =>
+const inside = (points: Vec2[], width: number, height: number) =>
   points.every(([x, y]) => x >= 0 && x < width && y >= 0 && y < height);
 
 describe.each(["r2", "halton"] as const)("quasiRandomPoints, %s", (sequence) => {
