@@ -7,6 +7,10 @@ export { RNG } from "./rng.js";
 export { hashSeed } from "./hash.js";
 export type { RNGState } from "./rng.js";
 export { poissonDiskPoints, PoissonDiskSampling } from "./poissonDisk.js";
+export type { PoissonDiskOptions, PoissonDiskSpacing } from "./poissonDisk.js";
+export { inAnnulus, inPolygon, inTriangle, pointInPolygon } from "./shapes.js";
+export { jitteredGridPoints, quasiRandomPoints } from "./spreads.js";
+export type { JitteredGridConfig, QuasiRandomConfig, QuasiRandomSequence } from "./spreads.js";
 export {
   bernoulli,
   beta,
@@ -26,10 +30,11 @@ export {
   studentT,
   triangular,
   truncatedGaussian,
+  vonMises,
   weibull,
   zipf,
 } from "./distributions.js";
-export { perlinNoise, valueNoise } from "./noise.js";
+export { perlinNoise, simplexNoise, valueNoise } from "./noise.js";
 export type { FbmConfig, NoiseField } from "./noise.js";
 export { walk } from "./walk.js";
 export type { WalkConfig } from "./walk.js";

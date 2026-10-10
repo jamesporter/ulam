@@ -6,11 +6,7 @@ import { CodeBlock } from '@/components/docs/CodeBlock'
 import { Md } from '@/components/docs/Md'
 import { PageHeader } from '@/components/docs/Prose'
 import { Input } from '@/components/ui/input'
-import { apiGroups, type ApiEntry } from '@/content/api'
-
-function href(e: ApiEntry) {
-  return e.page.startsWith('/docs/distributions/') ? e.page : `${e.page}#${e.id}`
-}
+import { apiGroups, apiHref as href } from '@/content/api'
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z]+/g, '-')
 

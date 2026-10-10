@@ -13,10 +13,10 @@ const seeds = ['sunflower', 'tide', 'ember', 'lattice', 'fern', 'harbour', 'come
 const features = [
   { icon: Dices, title: 'Seeded, by number or name', body: 'PCG32 with excellent statistics. `new RNG("sunflower")` always draws the same picture.', to: '/docs/seeding' },
   { icon: GitFork, title: 'Independent streams', body: 'Named streams and forks, so adding a layer never disturbs the others.', to: '/docs/streams' },
-  { icon: ChartColumn, title: 'Twenty distributions', body: 'Gaussian to Pareto, Poisson to Zipf, Dirichlet shares — each with a live explorer.', to: '/docs/distributions' },
+  { icon: ChartColumn, title: 'Twenty-one distributions', body: 'Gaussian to Pareto, Poisson to Zipf, von Mises angles — each with a live explorer.', to: '/docs/distributions' },
   { icon: Compass, title: 'Vectors and directions', body: 'Evenly sampled directions, discs and balls, gaussian blurs in 2, 3 and 4D.', to: '/docs/vectors' },
-  { icon: Sparkles, title: 'Poisson disk points', body: 'Random, but never too close: the even scatter stipples and seeds want.', to: '/docs/points' },
-  { icon: Waves, title: 'Coherent noise', body: 'Perlin and value noise in 1, 2 and 3D, with fractal fbm built in.', to: '/docs/noise' },
+  { icon: Sparkles, title: 'Even spreads', body: 'Poisson disks of varying density or any shape, jittered grids and quasi-random sequences.', to: '/docs/points' },
+  { icon: Waves, title: 'Coherent noise', body: 'Simplex, Perlin and value noise in 1, 2 and 3D, with fractal fbm built in.', to: '/docs/noise' },
   { icon: Footprints, title: 'Random walks', body: 'Paths with momentum and drift, from jittery Brownian to slow meanders.', to: '/docs/walks' },
   { icon: Shuffle, title: 'Collections', body: 'Weighted choices, shuffles, and sampling with or without replacement.', to: '/docs/collections' },
   { icon: Link2, title: 'Save to a URL', body: 'A generator serialises to 32 characters, exact position and all.', to: '/docs/serialisation' },

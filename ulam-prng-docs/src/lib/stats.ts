@@ -78,6 +78,23 @@ export function studentTPdf(x: number, df: number): number {
   return Math.exp(logC - ((df + 1) / 2) * Math.log(1 + (x * x) / df))
 }
 
+/** e^-x I0(x), the exponentially scaled modified Bessel function, by its power series. */
+function besselI0Scaled(x: number): number {
+  let term = 1
+  let sum = 1
+  const q = (x * x) / 4
+  for (let k = 1; k < 500 && term > sum * 1e-16; k++) {
+    term *= q / (k * k)
+    sum += term
+  }
+  return sum * Math.exp(-x)
+}
+
+export function vonMisesPdf(x: number, mean: number, kappa: number): number {
+  if (x < mean - Math.PI || x > mean + Math.PI) return 0
+  return Math.exp(kappa * (Math.cos(x - mean) - 1)) / (2 * Math.PI * besselI0Scaled(kappa))
+}
+
 /** Summary statistics of a sample. */
 export function describe(xs: ArrayLike<number>) {
   let n = 0

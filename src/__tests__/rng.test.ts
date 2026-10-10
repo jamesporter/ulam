@@ -946,3 +946,109 @@ describe("determinism across the whole API", () => {
     expect(runEverything()).toEqual(runEverything());
   });
 });
+
+describe("weightedSampler", () => {
+  const cases: [number, string][] = [
+    [5, "a"],
+    [3, "b"],
+    [2, "c"],
+    [0, "never"],
+  ];
+
+  it("draws values in proportion to their weights", () => {
+    const draw = new RNG(1).weightedSampler(cases);
+    const counts: Record<string, number> = { a: 0, b: 0, c: 0, never: 0 };
+    const n = 50000;
+    for (let i = 0; i < n; i++) counts[draw()]++;
+    expect(counts.a / n).toBeCloseTo(0.5, 1);
+    expect(counts.b / n).toBeCloseTo(0.3, 1);
+    expect(counts.c / n).toBeCloseTo(0.2, 1);
+    expect(counts.never).toBe(0);
+  });
+
+  it("handles many values with very uneven weights", () => {
+    const many = Array.from({ length: 100 }, (_, i): [number, number] => [i + 1, i]);
+    const draw = new RNG(2).weightedSampler(many);
+    const n = 100000;
+    let total = 0;
+    for (let i = 0; i < n; i++) total += draw();
+    // Mean index is Σ i(i+1) / Σ (i+1) over 0..99 = 66
+    expect(total / n).toBeCloseTo(66, 0);
+  });
+
+  it("always gives the only value there is", () => {
+    const draw = new RNG(3).weightedSampler([[2, "x"]]);
+    expect(collect(20, draw)).toEqual(Array.from({ length: 20 }, () => "x"));
+  });
+
+  it("draws from the generator when called, one number per draw", () => {
+    const rng = new RNG(4);
+    const draw = rng.weightedSampler(cases);
+    const before = rng.getState();
+    draw();
+    const other = new RNG(4);
+    other.setState(before);
+    other.number();
+    expect(rng.getState()).toEqual(other.getState());
+  });
+
+  it("is reproducible for a given seed", () => {
+    expect(collect(30, new RNG(5).weightedSampler(cases))).toEqual(
+      collect(30, new RNG(5).weightedSampler(cases)),
+    );
+  });
+
+  it("rejects empty, negative and all-zero weights up front", () => {
+    const rng = new RNG(6);
+    expect(() => rng.weightedSampler([])).toThrow("Must have at least one weight");
+    expect(() => rng.weightedSampler([[-1, "a"]])).toThrow("Weights must not be negative");
+    expect(() => rng.weightedSampler([[0, "a"]])).toThrow("Must be positive total");
+  });
+});
+
+function* numbers() {
+  for (let i = 0; i < 1000; i++) yield i;
+}
+
+describe("reservoirSample", () => {
+  it("chooses k distinct items", () => {
+    const items = Array.from({ length: 100 }, (_, i) => i);
+    const chosen = new RNG(1).reservoirSample(10, items);
+    expect(chosen).toHaveLength(10);
+    expect(new Set(chosen).size).toBe(10);
+    for (const c of chosen) expect(items).toContain(c);
+  });
+
+  it("takes any iterable, including one of unknown length", () => {
+    expect(new RNG(2).reservoirSample(5, numbers())).toHaveLength(5);
+    expect(new RNG(2).reservoirSample(2, new Set(["a", "b", "c"]))).toHaveLength(2);
+    expect(new RNG(2).reservoirSample(3, "hello")).toHaveLength(3);
+  });
+
+  it("gives every item an equal chance, wherever it sits", () => {
+    const counts = Array.from({ length: 20 }, () => 0);
+    const rng = new RNG(3);
+    const items = Array.from({ length: 20 }, (_, i) => i);
+    const runs = 20000;
+    for (let r = 0; r < runs; r++) for (const c of rng.reservoirSample(5, items)) counts[c]++;
+    for (const c of counts) expect(c / runs).toBeCloseTo(5 / 20, 1);
+  });
+
+  it("gives everything when there are fewer than k items", () => {
+    expect(new RNG(4).reservoirSample(10, [1, 2, 3])).toEqual([1, 2, 3]);
+    expect(new RNG(4).reservoirSample(0, [1, 2, 3])).toEqual([]);
+  });
+
+  it("takes one draw per item after the first k", () => {
+    const a = new RNG(5);
+    a.reservoirSample(3, [1, 2, 3, 4, 5, 6, 7]);
+    const b = new RNG(5);
+    for (let i = 0; i < 4; i++) b.number();
+    expect(a.next()).toBe(b.next());
+  });
+
+  it("rejects a k that is not a non-negative integer", () => {
+    expect(() => new RNG(6).reservoirSample(-1, [1])).toThrow("k must be a non-negative integer");
+    expect(() => new RNG(6).reservoirSample(1.5, [1])).toThrow("k must be a non-negative integer");
+  });
+});

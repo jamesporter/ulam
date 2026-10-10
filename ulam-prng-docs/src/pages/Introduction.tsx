@@ -7,8 +7,8 @@ import { Callout, H2, P, PageHeader } from '@/components/docs/Prose'
 const tour = [
   ['Seeding', '/docs/seeding', 'Numbers, strings, and moving around the sequence.'],
   ['Streams', '/docs/streams', 'Independent generators so parts of a sketch stop disturbing each other.'],
-  ['Distributions', '/docs/distributions', 'Twenty shapes of randomness, each with a live explorer.'],
-  ['Points and vectors', '/docs/points', 'Places, directions, discs, balls and Poisson disk scatter.'],
+  ['Distributions', '/docs/distributions', 'Twenty-one shapes of randomness, each with a live explorer.'],
+  ['Points and vectors', '/docs/points', 'Places, directions, shapes, and even spreads from jittered grids to Poisson disks.'],
   ['Noise', '/docs/noise', 'Smooth fields for things that should drift rather than jump.'],
   ['API reference', '/api', 'Every method and export on one page.'],
 ]
@@ -23,9 +23,9 @@ export function Introduction() {
 
       <P>
         Weighted choices, sampling, shuffling, a shelf of distributions from gaussian to Pareto, random vectors and
-        directions, perturbed points, Poisson disk distributions, coherent noise and random walks — all from one seed, so
-        the same seed always draws the same picture. Seed it with a string, split it into independent streams, and save
-        its exact position in a URL.
+        directions, points in shapes, Poisson disk and quasi-random spreads, coherent noise and random walks — all from one seed, so
+        the same seed always draws the same picture. Seed it with a string, split it into independent streams, jump
+        around its sequence, and save its exact position in a URL.
       </P>
 
       <H2 id="install">Installation</H2>

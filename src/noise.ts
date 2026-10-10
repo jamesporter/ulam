@@ -300,3 +300,162 @@ export function perlinNoise(rng: RandomSource): NoiseField {
     );
   });
 }
+
+/** Skewing and unskewing factors between the square grid and the simplex one. @internal */
+const F2 = 0.5 * (Math.sqrt(3) - 1);
+const G2 = (3 - Math.sqrt(3)) / 6;
+const F3 = 1 / 3;
+const G3 = 1 / 6;
+
+/**
+ * The twelve gradients of simplex noise: the midpoints of a cube's edges.
+ * Two dimensional noise uses their first two components.
+ * @internal
+ */
+const GRADIENTS = new Float64Array([
+  1, 1, 0, -1, 1, 0, 1, -1, 0, -1, -1, 0, 1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, -1, 0, 1, 1, 0, -1, 1,
+  0, 1, -1, 0, -1, -1,
+]);
+
+/** @internal */
+function clamp1(x: number): number {
+  return x < -1 ? -1 : x > 1 ? 1 : x;
+}
+
+/**
+ * Simplex noise: Ken Perlin's successor to his own gradient noise, summing
+ * contributions from the corners of a triangle (or tetrahedron) rather than a
+ * square (or cube). Fewer corners to visit, and no grid-aligned streaks, so
+ * it looks more even in every direction than {@link perlinNoise}.
+ *
+ * Usually you want {@link RNG.simplexNoise}, which supplies a seeded source
+ * for you; use this directly to drive it from another source of randomness.
+ *
+ * Building the field consumes a few hundred draws, after which sampling it
+ * takes none: the same point always gives the same value.
+ *
+ * @example
+ * ```ts
+ * const noise = simplexNoise(rng.random)
+ * noise.at(x * 3, y * 3) // -1 to 1, without the lattice showing through
+ * ```
+ */
+export function simplexNoise(rng: RandomSource): NoiseField {
+  const p = permutation(rng);
+  const gradient = new Uint8Array(TABLE_SIZE * 2);
+  for (let i = 0; i < TABLE_SIZE * 2; i++) gradient[i] = (p[i] % 12) * 3;
+
+  const corner2 = (t: number, g: number, x: number, y: number): number => {
+    if (t <= 0) return 0;
+    t *= t;
+    return t * t * (GRADIENTS[g] * x + GRADIENTS[g + 1] * y);
+  };
+  const corner3 = (t: number, g: number, x: number, y: number, z: number): number => {
+    if (t <= 0) return 0;
+    t *= t;
+    return t * t * (GRADIENTS[g] * x + GRADIENTS[g + 1] * y + GRADIENTS[g + 2] * z);
+  };
+
+  return field((x: number, y?: number, z?: number): number => {
+    if (y === undefined) {
+      // One dimension: the two nearest integers, each with a slope of its own
+      const i0 = Math.floor(x);
+      const x0 = x - i0;
+      const x1 = x0 - 1;
+      const slope = (i: number, d: number): number => {
+        const h = p[i & 255];
+        return (h & 8 ? -1 : 1) * (1 + (h & 7)) * d;
+      };
+      let t0 = 1 - x0 * x0;
+      t0 *= t0;
+      let t1 = 1 - x1 * x1;
+      t1 *= t1;
+      return clamp1(0.395 * (t0 * t0 * slope(i0, x0) + t1 * t1 * slope(i0 + 1, x1)));
+    }
+
+    if (z === undefined) {
+      const s = (x + y) * F2;
+      const i = Math.floor(x + s);
+      const j = Math.floor(y + s);
+      const t = (i + j) * G2;
+      const x0 = x - (i - t);
+      const y0 = y - (j - t);
+      // Which of the square's two triangles the point is in
+      const i1 = x0 > y0 ? 1 : 0;
+      const j1 = 1 - i1;
+      const x1 = x0 - i1 + G2;
+      const y1 = y0 - j1 + G2;
+      const x2 = x0 - 1 + 2 * G2;
+      const y2 = y0 - 1 + 2 * G2;
+      const ii = i & 255;
+      const jj = j & 255;
+
+      return clamp1(
+        70 *
+          (corner2(0.5 - x0 * x0 - y0 * y0, gradient[ii + p[jj]], x0, y0) +
+            corner2(0.5 - x1 * x1 - y1 * y1, gradient[ii + i1 + p[jj + j1]], x1, y1) +
+            corner2(0.5 - x2 * x2 - y2 * y2, gradient[ii + 1 + p[jj + 1]], x2, y2)),
+      );
+    }
+
+    const s = (x + y + z) * F3;
+    const i = Math.floor(x + s);
+    const j = Math.floor(y + s);
+    const k = Math.floor(z + s);
+    const t = (i + j + k) * G3;
+    const x0 = x - (i - t);
+    const y0 = y - (j - t);
+    const z0 = z - (k - t);
+
+    // Which of the cube's six tetrahedra the point is in
+    let i1: number, j1: number, k1: number, i2: number, j2: number, k2: number;
+    if (x0 >= y0) {
+      if (y0 >= z0) [i1, j1, k1, i2, j2, k2] = [1, 0, 0, 1, 1, 0];
+      else if (x0 >= z0) [i1, j1, k1, i2, j2, k2] = [1, 0, 0, 1, 0, 1];
+      else [i1, j1, k1, i2, j2, k2] = [0, 0, 1, 1, 0, 1];
+    } else {
+      if (y0 < z0) [i1, j1, k1, i2, j2, k2] = [0, 0, 1, 0, 1, 1];
+      else if (x0 < z0) [i1, j1, k1, i2, j2, k2] = [0, 1, 0, 0, 1, 1];
+      else [i1, j1, k1, i2, j2, k2] = [0, 1, 0, 1, 1, 0];
+    }
+
+    const x1 = x0 - i1 + G3;
+    const y1 = y0 - j1 + G3;
+    const z1 = z0 - k1 + G3;
+    const x2 = x0 - i2 + 2 * G3;
+    const y2 = y0 - j2 + 2 * G3;
+    const z2 = z0 - k2 + 2 * G3;
+    const x3 = x0 - 1 + 3 * G3;
+    const y3 = y0 - 1 + 3 * G3;
+    const z3 = z0 - 1 + 3 * G3;
+    const ii = i & 255;
+    const jj = j & 255;
+    const kk = k & 255;
+
+    return clamp1(
+      32 *
+        (corner3(0.6 - x0 * x0 - y0 * y0 - z0 * z0, gradient[ii + p[jj + p[kk]]], x0, y0, z0) +
+          corner3(
+            0.6 - x1 * x1 - y1 * y1 - z1 * z1,
+            gradient[ii + i1 + p[jj + j1 + p[kk + k1]]],
+            x1,
+            y1,
+            z1,
+          ) +
+          corner3(
+            0.6 - x2 * x2 - y2 * y2 - z2 * z2,
+            gradient[ii + i2 + p[jj + j2 + p[kk + k2]]],
+            x2,
+            y2,
+            z2,
+          ) +
+          corner3(
+            0.6 - x3 * x3 - y3 * y3 - z3 * z3,
+            gradient[ii + 1 + p[jj + 1 + p[kk + 1]]],
+            x3,
+            y3,
+            z3,
+          )),
+    );
+  });
+}

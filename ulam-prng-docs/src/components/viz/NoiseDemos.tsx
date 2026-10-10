@@ -33,7 +33,7 @@ function colourMap(colours: Colours): Uint8ClampedArray {
   return map
 }
 
-type Kind = 'perlin' | 'value'
+type Kind = 'simplex' | 'perlin' | 'value'
 
 export function NoiseDemo() {
   const { text, setText, seed, reroll } = useSeed('landscape')
@@ -49,7 +49,7 @@ export function NoiseDemo() {
 
   const field = useMemo<NoiseField>(() => {
     const rng = new RNG(seed)
-    const base = kind === 'perlin' ? rng.perlinNoise() : rng.valueNoise()
+    const base = kind === 'simplex' ? rng.simplexNoise() : kind === 'perlin' ? rng.perlinNoise() : rng.valueNoise()
     return useFbm ? base.fbm({ octaves, lacunarity, gain }) : base
   }, [seed, kind, useFbm, octaves, lacunarity, gain])
 
@@ -117,6 +117,7 @@ export function NoiseDemo() {
             value={kind}
             onChange={setKind}
             options={[
+              { value: 'simplex', label: 'simplexNoise' },
               { value: 'perlin', label: 'perlinNoise' },
               { value: 'value', label: 'valueNoise' },
             ]}

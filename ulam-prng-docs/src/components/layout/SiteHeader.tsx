@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import { version } from '@/lib/version'
+import { CommandMenu } from './CommandMenu'
 import { GitHubIcon } from './GitHubIcon'
 import { Logo } from './Logo'
 import { SidebarNav } from './SidebarNav'
@@ -67,6 +68,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-1">
+          <CommandMenu />
           <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
             <a href="https://www.npmjs.com/package/ulam-prng" target="_blank" rel="noreferrer">
               npm

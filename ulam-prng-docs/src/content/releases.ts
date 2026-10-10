@@ -17,6 +17,69 @@ export type Release = {
 /** The history of ulam-prng, newest first. */
 export const releases: Release[] = [
   {
+    version: '0.5.0',
+    date: '2026-10-10',
+    headline: 'Even spreads, shapes, simplex noise and jumping ahead',
+    summary:
+      'More ways to put points where you want them — evenly, in varying density, or inside a shape — plus simplex noise, angles that cluster with von Mises, constant time weighted draws, and an O(log n) jump through the sequence. Every existing seed draws exactly what it drew before.',
+    highlight: `rng.jitteredGridPoints({ columns: 20 }) // One point per cell
+rng.quasiRandomPoints({ n: 400 }) // A low discrepancy sequence
+
+const noise = rng.simplexNoise()
+rng.poissonDiskPoints({
+  minDist: ([x, y]) => 0.01 + 0.02 * (noise.at(x * 3, y * 3) + 1),
+  maxDist: 0.05,
+  contains: (p) => pointInPolygon(p, outline),
+})
+
+rng.vonMises({ mean: Math.PI / 2, kappa: 4 }) // Mostly pointing up
+rng.skip(1_000_000) // A million draws on, without making them`,
+    sections: [
+      {
+        title: 'Points',
+        items: [
+          '`poissonDiskPoints` takes a function for `minDist`, with a `maxDist` bound, for density that varies across the canvas.',
+          '`poissonDiskPoints` takes a `contains` test to confine points to a shape, restarting so that separate islands of it are filled.',
+          '`jitteredGridPoints` for stratified points: one per grid cell, with `jitter` sliding back to a regular grid.',
+          '`quasiRandomPoints` for the R2 and Halton low discrepancy sequences, randomised by a shared offset so they cost two draws.',
+          '`inTriangle`, `inPolygon` (convex or not) and `inAnnulus`, all uniform by area; and `pointInPolygon` for the `contains` test.',
+        ],
+      },
+      {
+        title: 'Noise',
+        items: [
+          '`simplexNoise()` in one, two and three dimensions, bounded to `[-1, 1]`, with `fbm` like the others.',
+        ],
+      },
+      {
+        title: 'Distributions',
+        items: [
+          '`vonMises`, the circular counterpart of a gaussian, by Best and Fisher’s method — twenty-one distributions in all.',
+        ],
+      },
+      {
+        title: 'Collections',
+        items: [
+          '`weightedSampler` builds Vose’s alias table once, then draws from fixed weights in constant time.',
+          '`reservoirSample` takes `k` items uniformly from any iterable in one pass, without knowing its length.',
+        ],
+      },
+      {
+        title: 'Seeding',
+        items: [
+          '`skip(n)` jumps `n` draws along the sequence in O(log n), or back with a negative `n`, leaving seeds and streams alone.',
+        ],
+      },
+      {
+        title: 'Reliability',
+        items: [
+          'Poisson disk sampling was rebuilt to support the new options; for a plain `minDist` on the whole rectangle it draws exactly the points it drew before, checked point for point.',
+          'Golden vectors now pin every 0.5.0 addition too, and every new standalone function is checked draw for draw against its method.',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.4.0',
     date: '2026-08-25',
     headline: 'Seeds with names, streams, noise and walks',
