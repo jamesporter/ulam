@@ -53,4 +53,4 @@ export {
   uniformVec4,
 } from "./vectors.js";
 export type { GaussianVecConfig, UniformVecConfig } from "./vectors.js";
-export type { Point2D, RandomSource, Vec2, Vec3, Vec4, Vector2D } from "./types.js";
+export type { RandomSource, Vec2, Vec3, Vec4 } from "./types.js";

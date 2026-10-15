@@ -5,14 +5,14 @@
  * @module poissonDisk
  */
 
-import type { Point2D } from "./types.js";
+import type { Vec2 } from "./types.js";
 
 /**
  * The spacing between Poisson disk points: one distance for the whole region,
  * or a distance that depends on where you are, for density that varies across
  * the canvas.
  */
-export type PoissonDiskSpacing = number | ((at: Point2D) => number);
+export type PoissonDiskSpacing = number | ((at: Vec2) => number);
 
 /** The optional extras for a {@link PoissonDiskSampling}. */
 export type PoissonDiskOptions = {
@@ -25,7 +25,7 @@ export type PoissonDiskOptions = {
    * Which points of the region to fill: candidates for which this is false
    * are rejected, so the points take the shape it describes.
    */
-  contains?: (at: Point2D) => boolean;
+  contains?: (at: Vec2) => boolean;
 };
 
 /**
@@ -77,10 +77,10 @@ export function poissonDiskPoints({
   height: number;
   minDist: PoissonDiskSpacing;
   maxDist?: number;
-  contains?: (at: Point2D) => boolean;
+  contains?: (at: Vec2) => boolean;
   rng: () => number;
   k?: number;
-}): Point2D[] {
+}): Vec2[] {
   const pds = new PoissonDiskSampling(width, height, minDist, k, { maxDist, contains });
   pds.generatePoints(rng);
   return pds.points;
@@ -106,7 +106,7 @@ export class PoissonDiskSampling {
   /** Indices into {@link points}, bucketed by grid cell. */
   private grid: (number[] | undefined)[];
   /** Generated points */
-  points: Point2D[];
+  points: Vec2[];
   /** The spacing each point keeps, parallel to {@link points}. */
   private radii: number[];
   private spawnPoints: number[];
@@ -114,7 +114,7 @@ export class PoissonDiskSampling {
   private columns: number;
   private rows: number;
   private maxDist: number;
-  private contains?: (at: Point2D) => boolean;
+  private contains?: (at: Vec2) => boolean;
 
   /**
    * Creates a new Poisson disk sampler.
@@ -168,7 +168,7 @@ export class PoissonDiskSampling {
    * @throws Error if a `minDist` function gives something other than a
    * positive number
    */
-  generatePoints(rng: () => number): Point2D[] {
+  generatePoints(rng: () => number): Vec2[] {
     // Without a shape, the first random place is always valid, and once the
     // spawn list runs dry the rectangle is full
     while (this.start(rng)) {
@@ -182,7 +182,7 @@ export class PoissonDiskSampling {
         for (let i = 0; i < this.k; i++) {
           const angle = rng() * 2 * Math.PI;
           const dist = rng() * spacing + spacing;
-          const candidate: Point2D = [sx + Math.cos(angle) * dist, sy + Math.sin(angle) * dist];
+          const candidate: Vec2 = [sx + Math.cos(angle) * dist, sy + Math.sin(angle) * dist];
           const radius = this.radiusIfValid(candidate);
           if (radius !== undefined) {
             this.add(candidate, radius);
@@ -210,7 +210,7 @@ export class PoissonDiskSampling {
   private start(rng: () => number): boolean {
     const attempts = this.contains ? RESTART_ATTEMPTS : 1;
     for (let i = 0; i < attempts; i++) {
-      const candidate: Point2D = [rng() * this.width, rng() * this.height];
+      const candidate: Vec2 = [rng() * this.width, rng() * this.height];
       const radius = this.radiusIfValid(candidate);
       if (radius !== undefined) {
         this.add(candidate, radius);
@@ -221,7 +221,7 @@ export class PoissonDiskSampling {
   }
 
   /** @internal */
-  private add(point: Point2D, radius: number): void {
+  private add(point: Vec2, radius: number): void {
     const index = this.points.length;
     this.points.push(point);
     this.radii.push(radius);
@@ -236,7 +236,7 @@ export class PoissonDiskSampling {
    * shape, and far enough from every other point. `undefined` if not.
    * @internal
    */
-  private radiusIfValid(point: Point2D): number | undefined {
+  private radiusIfValid(point: Vec2): number | undefined {
     const [x, y] = point;
     if (x < 0 || x >= this.width || y < 0 || y >= this.height) return undefined;
     if (this.contains && !this.contains(point)) return undefined;

@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { RNG } from "../rng.js";
-import type { Point2D } from "../types.js";
+import type { Vec2 } from "../types.js";
 
 /** A generator seeded the same way every time, for deterministic assertions. */
 const seeded = () => new RNG(1234);
@@ -671,7 +671,7 @@ describe("shuffled", () => {
 describe("perturb", () => {
   it("moves a point by at most half the magnitude on each axis", () => {
     const rng = seeded();
-    const at: Point2D = [0.5, 0.5];
+    const at: Vec2 = [0.5, 0.5];
     for (let i = 0; i < 1000; i++) {
       const [x, y] = rng.perturb({ at, magnitude: 0.4 });
       expect(Math.abs(x - 0.5)).toBeLessThanOrEqual(0.2);
@@ -697,7 +697,7 @@ describe("perturb", () => {
 
   it("does not mutate the input point", () => {
     const rng = seeded();
-    const at: Point2D = [0.5, 0.5];
+    const at: Vec2 = [0.5, 0.5];
     rng.perturb({ at });
     expect(at).toEqual([0.5, 0.5]);
   });
@@ -845,6 +845,21 @@ describe("proportionately", () => {
       [1, () => calls++],
     ]);
     expect(calls).toBe(1);
+  });
+
+  it("falls back to the last possible case when rounding leaves the draw past every weight", () => {
+    const rng = seeded();
+    // 0.1 + 0.2 + 0.3 rounds up, so subtracting the weights from the very
+    // top of the range leaves a hair more than the last one
+    vi.spyOn(rng, "number").mockReturnValue(1 - Number.EPSILON / 2);
+    const cases: [number, () => string][] = [
+      [0.1, () => "a"],
+      [0.2, () => "b"],
+      [0.3, () => "c"],
+    ];
+    expect(rng.proportionately(cases)).toBe("c");
+    // ...and never onto a weight of zero
+    expect(rng.proportionately([...cases, [0, () => "d"]])).toBe("c");
   });
 });
 

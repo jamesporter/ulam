@@ -292,7 +292,7 @@ const points: ApiEntry[] = [
   m({
     id: 'randomPoint',
     name: 'randomPoint',
-    signature: 'randomPoint(config?: { width?: number; height?: number }): Point2D',
+    signature: 'randomPoint(config?: { width?: number; height?: number }): Vec2',
     summary: 'A uniform point in a rectangle, by default the unit square.',
     params: [
       { name: 'width', type: 'number', default: '1', description: 'Width of the region' },
@@ -306,7 +306,7 @@ rng.randomPoint({ width: 1, height: 0.75 }) // A canvas of that shape`,
   m({
     id: 'uniformGridPoint',
     name: 'uniformGridPoint',
-    signature: 'uniformGridPoint(config: { minX: number; maxX: number; minY: number; maxY: number }): Point2D',
+    signature: 'uniformGridPoint(config: { minX: number; maxX: number; minY: number; maxY: number }): Vec2',
     summary: 'A random point with integer coordinates; all four bounds are inclusive.',
     example: `rng.uniformGridPoint({ minX: 0, maxX: 9, minY: 0, maxY: 9 })`,
     since: '0.1.0',
@@ -315,11 +315,11 @@ rng.randomPoint({ width: 1, height: 0.75 }) // A canvas of that shape`,
   m({
     id: 'perturb',
     name: 'perturb',
-    signature: 'perturb(config: { at: Point2D; magnitude?: number }): Point2D',
+    signature: 'perturb(config: { at: Vec2; magnitude?: number }): Vec2',
     summary:
       'Nudges a point by a uniform amount on each axis: by default ±0.05, and generally ±`magnitude / 2`.',
     params: [
-      { name: 'at', type: 'Point2D', description: 'The point to move' },
+      { name: 'at', type: 'Vec2', description: 'The point to move' },
       { name: 'magnitude', type: 'number', default: '0.1', description: 'The width of the window each coordinate can move within' },
     ],
     example: `rng.perturb({ at: [0.5, 0.5] }) // Nudge by ±0.05 on each axis
@@ -331,7 +331,7 @@ rng.perturb({ at: [0.5, 0.5], magnitude: 1 }) // Nudge by ±0.5`,
     id: 'poissonDiskPoints',
     name: 'poissonDiskPoints',
     signature:
-      'poissonDiskPoints(config: { minDist: PoissonDiskSpacing; maxDist?: number; contains?: (at: Point2D) => boolean; width?: number; height?: number; attempts?: number }): Point2D[]',
+      'poissonDiskPoints(config: { minDist: PoissonDiskSpacing; maxDist?: number; contains?: (at: Vec2) => boolean; width?: number; height?: number; attempts?: number }): Vec2[]',
     summary:
       'Points scattered at random but never closer together than `minDist`: far more even, and far better looking, than uniform placement.',
     details: [
@@ -339,9 +339,9 @@ rng.perturb({ at: [0.5, 0.5], magnitude: 1 }) // Nudge by ±0.5`,
       'Also since 0.5.0, `contains` confines the points to a shape. The sampler restarts from fresh random places when it runs out of room, so separate islands of the shape are filled too.',
     ],
     params: [
-      { name: 'minDist', type: 'number | (at: Point2D) => number', description: 'The closest any two points may be, or a function giving it at each point' },
+      { name: 'minDist', type: 'number | (at: Vec2) => number', description: 'The closest any two points may be, or a function giving it at each point' },
       { name: 'maxDist', type: 'number', description: 'The largest a `minDist` function can give; required with one, and larger values are capped at it' },
-      { name: 'contains', type: '(at: Point2D) => boolean', default: 'everywhere', description: 'Which places in the region to fill' },
+      { name: 'contains', type: '(at: Vec2) => boolean', default: 'everywhere', description: 'Which places in the region to fill' },
       { name: 'width', type: 'number', default: '1', description: 'Width of the region' },
       { name: 'height', type: 'number', default: '1', description: 'Height of the region' },
       { name: 'attempts', type: 'number', default: '30', description: 'Tries to place each new point; higher packs tighter' },
@@ -369,7 +369,7 @@ rng.poissonDiskPoints({
     id: 'forPoissonDiskPoints',
     name: 'forPoissonDiskPoints',
     signature:
-      'forPoissonDiskPoints(config: { minDist: PoissonDiskSpacing; maxDist?: number; contains?: (at: Point2D) => boolean; width?: number; height?: number; attempts?: number }, callback: (at: Point2D, i: number) => void): void',
+      'forPoissonDiskPoints(config: { minDist: PoissonDiskSpacing; maxDist?: number; contains?: (at: Vec2) => boolean; width?: number; height?: number; attempts?: number }, callback: (at: Vec2, i: number) => void): void',
     summary: 'Runs a callback for each Poisson disk point, with its index.',
     example: `rng.forPoissonDiskPoints({ minDist: 0.05, height: 0.75 }, ([x, y], i) => {
   drawDot(x, y, i)
@@ -380,7 +380,7 @@ rng.poissonDiskPoints({
   m({
     id: 'quasiRandomPoints',
     name: 'quasiRandomPoints',
-    signature: 'quasiRandomPoints(config: QuasiRandomConfig): Point2D[]',
+    signature: 'quasiRandomPoints(config: QuasiRandomConfig): Vec2[]',
     summary:
       'A low discrepancy sequence: points that spread out as evenly as they can however many you take, so they never clump or leave gaps — at a fraction of the cost of Poisson disk sampling.',
     details: [
@@ -402,7 +402,7 @@ rng.quasiRandomPoints({ n: 500, sequence: "halton", height: 0.75 })`,
   m({
     id: 'jitteredGridPoints',
     name: 'jitteredGridPoints',
-    signature: 'jitteredGridPoints(config: JitteredGridConfig): Point2D[]',
+    signature: 'jitteredGridPoints(config: JitteredGridConfig): Vec2[]',
     summary:
       'One random point in every cell of a grid: stratified sampling. Far more even than uniform points at the same cost, and with `jitter` it slides all the way to a regular grid.',
     details: ['Points come back a row at a time, from the top left, two draws each.'],
@@ -885,12 +885,12 @@ const standalone: ApiEntry[] = [
   fn('inTriangle', 'inTriangle(rng: RandomSource, a: Vec2, b: Vec2, c: Vec2): Vec2', 'The standalone form of [`rng.inTriangle`](/docs/points#inTriangle).', '0.5.0'),
   fn('inPolygon', 'inPolygon(rng: RandomSource, vertices: Vec2[]): Vec2', 'The standalone form of [`rng.inPolygon`](/docs/points#inPolygon).', '0.5.0'),
   fn('inAnnulus', 'inAnnulus(rng: RandomSource, config: { inner: number; outer?: number }): Vec2', 'The standalone form of [`rng.inAnnulus`](/docs/points#inAnnulus).', '0.5.0'),
-  fn('quasiRandomPoints', 'quasiRandomPoints(rng: RandomSource, config: QuasiRandomConfig): Point2D[]', 'The standalone form of [`rng.quasiRandomPoints`](/docs/points#quasiRandomPoints).', '0.5.0'),
-  fn('jitteredGridPoints', 'jitteredGridPoints(rng: RandomSource, config: JitteredGridConfig): Point2D[]', 'The standalone form of [`rng.jitteredGridPoints`](/docs/points#jitteredGridPoints).', '0.5.0'),
+  fn('quasiRandomPoints', 'quasiRandomPoints(rng: RandomSource, config: QuasiRandomConfig): Vec2[]', 'The standalone form of [`rng.quasiRandomPoints`](/docs/points#quasiRandomPoints).', '0.5.0'),
+  fn('jitteredGridPoints', 'jitteredGridPoints(rng: RandomSource, config: JitteredGridConfig): Vec2[]', 'The standalone form of [`rng.jitteredGridPoints`](/docs/points#jitteredGridPoints).', '0.5.0'),
   fn('walk', 'walk(rng: RandomSource, config: WalkConfig): Vec2[]', 'The standalone form of [`rng.walk`](/docs/walks#walk).', '0.4.0'),
   fn(
     'poissonDiskPoints',
-    'poissonDiskPoints(config: { width: number; height: number; minDist: PoissonDiskSpacing; maxDist?: number; contains?: (at: Point2D) => boolean; rng: () => number; k?: number }): Point2D[]',
+    'poissonDiskPoints(config: { width: number; height: number; minDist: PoissonDiskSpacing; maxDist?: number; contains?: (at: Vec2) => boolean; rng: () => number; k?: number }): Vec2[]',
     'Bridson’s Poisson disk sampling over a `width` × `height` region, driven by any `rng`. The standalone form of [`rng.poissonDiskPoints`](/docs/points#poissonDiskPoints); note that `k` is what the method calls `attempts`.',
     '0.1.0',
     {
@@ -934,14 +934,12 @@ const types: ApiEntry[] = [
   t('Vec2', 'type Vec2 = [number, number]', 'A vector or point in two dimensions. A plain tuple, so it drops into whatever geometry you already use.', '0.2.0', '/docs/vectors'),
   t('Vec3', 'type Vec3 = [number, number, number]', 'A vector or point in three dimensions.', '0.2.0', '/docs/vectors'),
   t('Vec4', 'type Vec4 = [number, number, number, number]', 'A vector or point in four dimensions.', '0.2.0', '/docs/vectors'),
-  t('Point2D', 'type Point2D = Vec2', 'A point in two dimensions; an alias of `Vec2`.', '0.1.0', '/docs/vectors'),
-  t('Vector2D', 'type Vector2D = Vec2', 'A vector in two dimensions; an alias of `Vec2`.', '0.1.0', '/docs/vectors'),
   t('UniformVecConfig', 'type UniformVecConfig = { from?: number; to?: number }', 'Bounds for the uniform vectors, applied to every component.', '0.2.0', '/docs/vectors'),
   t('GaussianVecConfig', 'type GaussianVecConfig<V> = { mean?: V; sd?: number }', 'Centre and spread for the gaussian vectors.', '0.2.0', '/docs/vectors'),
   t('NoiseField', 'type NoiseField = {\n  at(x: number, y?: number, z?: number): number\n  fbm(config?: FbmConfig): NoiseField\n}', 'A seeded noise field, sampled in one, two or three dimensions.', '0.4.0', '/docs/noise'),
   t('FbmConfig', 'type FbmConfig = { octaves?: number; lacunarity?: number; gain?: number }', 'How an fbm field stacks its octaves.', '0.4.0', '/docs/noise'),
-  t('PoissonDiskSpacing', 'type PoissonDiskSpacing = number | ((at: Point2D) => number)', 'One spacing for the whole region, or one that depends on where you are.', '0.5.0', '/docs/points'),
-  t('PoissonDiskOptions', 'type PoissonDiskOptions = {\n  maxDist?: number\n  contains?: (at: Point2D) => boolean\n}', 'The extras for `PoissonDiskSampling`: an upper bound on a varying spacing, and a shape to fill.', '0.5.0'),
+  t('PoissonDiskSpacing', 'type PoissonDiskSpacing = number | ((at: Vec2) => number)', 'One spacing for the whole region, or one that depends on where you are.', '0.5.0', '/docs/points'),
+  t('PoissonDiskOptions', 'type PoissonDiskOptions = {\n  maxDist?: number\n  contains?: (at: Vec2) => boolean\n}', 'The extras for `PoissonDiskSampling`: an upper bound on a varying spacing, and a shape to fill.', '0.5.0'),
   t('QuasiRandomConfig', 'type QuasiRandomConfig = {\n  n: number\n  width?: number\n  height?: number\n  sequence?: QuasiRandomSequence\n}', 'Where and how many points `quasiRandomPoints` places.', '0.5.0', '/docs/points'),
   t('QuasiRandomSequence', 'type QuasiRandomSequence = "r2" | "halton"', 'The low discrepancy sequences on offer.', '0.5.0', '/docs/points'),
   t('JitteredGridConfig', 'type JitteredGridConfig = {\n  columns: number\n  rows?: number\n  width?: number\n  height?: number\n  jitter?: number\n}', 'The grid `jitteredGridPoints` fills.', '0.5.0', '/docs/points'),

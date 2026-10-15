@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { PoissonDiskSampling, poissonDiskPoints } from "../poissonDisk.js";
 import { RNG } from "../rng.js";
-import type { Point2D } from "../types.js";
+import type { Vec2 } from "../types.js";
 
-const distance = (a: Point2D, b: Point2D) => Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);
+const distance = (a: Vec2, b: Vec2) => Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);
 
 /** The smallest gap between any two of the given points. */
-function minSeparation(points: Point2D[]): number {
+function minSeparation(points: Vec2[]): number {
   let min = Infinity;
   for (let i = 0; i < points.length; i++) {
     for (let j = i + 1; j < points.length; j++) {
@@ -178,7 +178,7 @@ describe("RNG.poissonDiskPoints", () => {
 describe("RNG.forPoissonDiskPoints", () => {
   it("calls back once per point, in order, with the index", () => {
     const expected = new RNG(9).poissonDiskPoints({ minDist: 0.1 });
-    const seen: Point2D[] = [];
+    const seen: Vec2[] = [];
     new RNG(9).forPoissonDiskPoints({ minDist: 0.1 }, (at, i) => {
       expect(i).toBe(seen.length);
       seen.push(at);
@@ -187,9 +187,9 @@ describe("RNG.forPoissonDiskPoints", () => {
   });
 });
 
-const spacing = ([x]: Point2D) => 0.02 + 0.08 * x;
-const inCircle = ([x, y]: Point2D) => (x - 0.5) ** 2 + (y - 0.5) ** 2 < 0.16;
-const islands = ([x, y]: Point2D) => (x < 0.2 || x > 0.8) && y > 0.4 && y < 0.6;
+const spacing = ([x]: Vec2) => 0.02 + 0.08 * x;
+const inCircle = ([x, y]: Vec2) => (x - 0.5) ** 2 + (y - 0.5) ** 2 < 0.16;
+const islands = ([x, y]: Vec2) => (x < 0.2 || x > 0.8) && y > 0.4 && y < 0.6;
 
 describe("Poisson disk spacing that varies", () => {
   it("keeps every pair at least the average of their spacings apart", () => {

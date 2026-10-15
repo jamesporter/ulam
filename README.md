@@ -278,8 +278,7 @@ hand Poisson disk sampling when it should fill a shape.
 ## Vectors
 
 `Vec2`, `Vec3` and `Vec4` are plain tuples — `[number, number]` and friends —
-so they drop straight into whatever you already use for geometry. `Point2D`
-is an alias of `Vec2`.
+so they drop straight into whatever you already use for geometry.
 
 ```ts
 import type { Vec2, Vec3, Vec4 } from "ulam-prng";

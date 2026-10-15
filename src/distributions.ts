@@ -316,8 +316,11 @@ export function categorical(rng: RandomSource, weights: number[]): number {
     if (weights[i] > r) return i;
     r -= weights[i];
   }
-  // Only reachable through floating point drift at the very end of the range
-  return weights.length - 1;
+  // Only reachable through floating point drift at the very end of the range,
+  // so settle on the last option that could have been picked
+  let last = weights.length - 1;
+  while (weights[last] === 0) last--;
+  return last;
 }
 
 /**
@@ -517,8 +520,9 @@ function erfc(x: number): number {
  * @internal
  */
 function normalQuantile(p: number): number {
-  if (p <= 0) return Number.NEGATIVE_INFINITY;
-  if (p >= 1) return Number.POSITIVE_INFINITY;
+  // The tails are infinitely far out, but a source can return exactly 0 (or
+  // come within rounding of 1), so stop at the last representable probability
+  p = Math.min(Math.max(p, Number.MIN_VALUE), 1 - Number.EPSILON / 2);
 
   const a = [
     -3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.38357751867269e2,

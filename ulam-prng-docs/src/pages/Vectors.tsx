@@ -13,7 +13,7 @@ export function Vectors() {
 
       <P>
         `Vec2`, `Vec3` and `Vec4` are plain tuples — `[number, number]` and friends — so they drop straight into whatever
-        you already use for geometry. `Point2D` is an alias of `Vec2`.
+        you already use for geometry.
       </P>
       <CodeBlock
         code={`import type { Vec2, Vec3, Vec4 } from "ulam-prng"
@@ -61,8 +61,6 @@ rng.inUnitBall() // Uniform by volume`}
         'Vec2',
         'Vec3',
         'Vec4',
-        'Point2D',
-        'Vector2D',
         'UniformVecConfig',
         'GaussianVecConfig',
       ].map((id) => (

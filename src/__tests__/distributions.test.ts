@@ -27,6 +27,9 @@ import { RNG } from "../rng.js";
 /** A generator seeded the same way every time, for deterministic assertions. */
 const seeded = () => new RNG(1234);
 
+/** The largest value a random source can return: the double just below one. */
+const TOP = 1 - Number.EPSILON / 2;
+
 /** The mean of some numbers. */
 const average = (ns: number[]) => ns.reduce((a, b) => a + b, 0) / ns.length;
 
@@ -337,6 +340,12 @@ describe("gamma", () => {
 });
 
 describe("beta", () => {
+  it("splits evenly when both draws underflow to zero", () => {
+    // Shapes this small almost always send both gamma draws to exactly zero
+    const rng = seeded();
+    expect(beta(rng.random, { alpha: 1e-10, beta: 1e-10 })).toBe(0.5);
+  });
+
   it("stays in [0, 1]", () => {
     const rng = seeded();
     for (const n of collect(2000, () => beta(rng.random, { alpha: 0.5, beta: 0.5 }))) {
@@ -502,6 +511,14 @@ describe("categorical", () => {
     expect(() => categorical(seeded().random, [1, -1])).toThrow();
     expect(() => categorical(seeded().random, [0, 0])).toThrow();
   });
+
+  it("falls back to the last possible index when rounding leaves the draw past every weight", () => {
+    // 0.1 + 0.2 + 0.3 rounds up, so subtracting the weights from the very
+    // top of the range leaves a hair more than the last one
+    expect(categorical(() => TOP, [0.1, 0.2, 0.3])).toBe(2);
+    // ...and never onto a weight of zero
+    expect(categorical(() => TOP, [0.1, 0.2, 0.3, 0, 0])).toBe(2);
+  });
 });
 
 describe("RNG methods", () => {
@@ -565,6 +582,11 @@ describe("weightedSample", () => {
 });
 
 describe("dirichlet", () => {
+  it("shares out evenly when every draw underflows to zero", () => {
+    const rng = seeded();
+    expect(dirichlet(rng.random, [1e-10, 1e-10, 1e-10])).toEqual([1 / 3, 1 / 3, 1 / 3]);
+  });
+
   it("gives one share per concentration, summing to one", () => {
     const rng = seeded();
     for (let i = 0; i < 200; i++) {
@@ -645,6 +667,11 @@ function exactZipf(n: number, exponent: number): number[] {
 }
 
 describe("zipf", () => {
+  it("keeps the very bottom of the source range within its ranks", () => {
+    // A source of exactly zero lands half a rank past the end before clamping
+    expect(zipf(() => 0, { n: 10 })).toBe(10);
+  });
+
   /** How often each rank came up, over many draws. */
   const frequencies = (n: number, exponent: number, draws = 100000) => {
     const rng = seeded();
@@ -729,6 +756,24 @@ describe("zipf", () => {
 });
 
 describe("truncatedGaussian", () => {
+  it("is a standard normal with no config", () => {
+    const rng = seeded();
+    const values = collect(20000, () => truncatedGaussian(rng.random));
+    expect(mean(values)).toBeCloseTo(0, 1);
+    expect(sd(values)).toBeCloseTo(1, 1);
+  });
+
+  it("stays finite at the very ends of the source range", () => {
+    for (const config of [undefined, { min: 0 }, { max: 0 }, { mean: 3, sd: 2 }]) {
+      for (const source of [() => 0, () => TOP]) {
+        expect(Number.isFinite(truncatedGaussian(source, config))).toBe(true);
+      }
+    }
+    // Far out in the tails, but on the right sides
+    expect(truncatedGaussian(() => 0)).toBeLessThan(-30);
+    expect(truncatedGaussian(() => TOP)).toBeGreaterThan(8);
+  });
+
   it("stays inside its bounds", () => {
     const rng = seeded();
     for (let i = 0; i < 5000; i++) {
