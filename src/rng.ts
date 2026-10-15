@@ -699,8 +699,11 @@ export class RNG {
         r -= cases[i][0];
       }
     }
-    // fallback *should never happen!*
-    return cases[0][1]();
+    // Only reachable through floating point drift at the very end of the range,
+    // so settle on the last case that could have been picked
+    let last = cases.length - 1;
+    while (cases[last][0] === 0) last--;
+    return cases[last][1]();
   }
 
   /**

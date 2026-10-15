@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { RNG } from "../rng.js";
 import type { Vec2 } from "../types.js";
 
@@ -845,6 +845,21 @@ describe("proportionately", () => {
       [1, () => calls++],
     ]);
     expect(calls).toBe(1);
+  });
+
+  it("falls back to the last possible case when rounding leaves the draw past every weight", () => {
+    const rng = seeded();
+    // 0.1 + 0.2 + 0.3 rounds up, so subtracting the weights from the very
+    // top of the range leaves a hair more than the last one
+    vi.spyOn(rng, "number").mockReturnValue(1 - Number.EPSILON / 2);
+    const cases: [number, () => string][] = [
+      [0.1, () => "a"],
+      [0.2, () => "b"],
+      [0.3, () => "c"],
+    ];
+    expect(rng.proportionately(cases)).toBe("c");
+    // ...and never onto a weight of zero
+    expect(rng.proportionately([...cases, [0, () => "d"]])).toBe("c");
   });
 });
 

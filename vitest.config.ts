@@ -3,5 +3,13 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.ts"],
+      exclude: ["src/**/__tests__/**", "src/types.ts"],
+      reporter: ["text", "html"],
+      // What is left uncovered are guards against rounding that no draw reaches
+      thresholds: { statements: 99, branches: 98, functions: 100, lines: 99 },
+    },
   },
 });

@@ -107,6 +107,24 @@ describe("walk", () => {
     expect(path[1][1]).toBeCloseTo(1, 9);
   });
 
+  it("takes the fresh direction when blending cancels the old one out exactly", () => {
+    // Find a source value whose direction is the exact opposite of some heading,
+    // so an even blend of the two comes to precisely nothing
+    for (let i = 1; i < 1000; i++) {
+      const r = i / 1000;
+      const angle = r * Math.PI * 2;
+      const [rx, ry] = [Math.cos(angle), Math.sin(angle)];
+      const heading = angle - Math.PI;
+      if (Math.cos(heading) !== -rx || Math.sin(heading) !== -ry) continue;
+
+      const path = walk(() => r, { steps: 2, stepSize: 1, momentum: 0.5, heading });
+      expect(path[2][0] - path[1][0]).toBeCloseTo(rx, 12);
+      expect(path[2][1] - path[1][1]).toBeCloseTo(ry, 12);
+      return;
+    }
+    throw new Error("No exactly opposite direction found");
+  });
+
   it("matches the standalone function driven by the same generator", () => {
     const config = { steps: 10, momentum: 0.5 };
     expect(new RNG(1234).walk(config)).toEqual(walk(new RNG(1234).random, config));
