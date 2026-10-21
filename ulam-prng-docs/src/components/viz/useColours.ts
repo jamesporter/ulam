@@ -10,6 +10,8 @@ export type Colours = {
   card: string
   /** Steps from brand to brand-2, for colouring by a number */
   ramp: string[]
+  /** The five chart colours, for telling categories apart */
+  chart: string[]
 }
 
 /** Resolves any CSS colour expression to one a canvas understands. */
@@ -39,6 +41,7 @@ export function useColours(): Colours {
       bg: resolve('var(--background)'),
       card: resolve('var(--card)'),
       ramp,
+      chart: [1, 2, 3, 4, 5].map((i) => resolve(`var(--chart-${i})`)),
     }
   }, [theme])
 }

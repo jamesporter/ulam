@@ -100,14 +100,14 @@ export function Segmented<T extends string | number>({
   return (
     <div className="flex flex-col gap-1.5">
       {label && <span className="text-xs font-medium text-muted-foreground">{label}</span>}
-      <div className="inline-flex w-fit rounded-lg bg-muted p-0.5">
+      <div className="inline-flex w-fit flex-wrap rounded-lg bg-muted p-0.5">
         {options.map((o) => (
           <button
             key={String(o.value)}
             type="button"
             onClick={() => onChange(o.value)}
             className={cn(
-              'rounded-md px-2.5 py-1 font-mono text-xs transition-colors',
+              'rounded-md px-2.5 py-1 font-mono text-xs whitespace-nowrap transition-colors',
               o.value === value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
             )}
           >

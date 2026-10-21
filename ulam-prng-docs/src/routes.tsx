@@ -44,4 +44,6 @@ export const routes: RouteObject[] = [
       { path: '*', element: <NotFound /> },
     ],
   },
+  // Fullscreen, so outside the site's header and footer
+  { path: 'presentation', lazy: page(() => import('@/pages/Presentation'), 'Presentation') },
 ]

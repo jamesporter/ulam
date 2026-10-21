@@ -18,6 +18,7 @@ import { nav } from '@/content/nav'
 
 const pages = [
   { title: 'Home', to: '/', section: 'ulam-prng' },
+  { title: 'Presentation', to: '/presentation', section: 'ulam-prng' },
   ...nav.flatMap((s) => s.items.map((i) => ({ title: i.title, to: i.to, section: s.title }))),
 ]
 

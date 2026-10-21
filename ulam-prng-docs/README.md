@@ -29,6 +29,11 @@ pnpm lint
   `releases.ts` is the release history; `nav.ts` the sidebar.
 - `src/pages/` — one file per route, loaded lazily.
 - `src/components/viz/` — the interactive demos.
+- `src/components/slides/` — the fullscreen presentation at `/presentation`:
+  `deck.tsx` lists the slides in order, and each slide is a component built
+  from the layout and charts in `kit.tsx` and `charts.tsx`. The distribution
+  slides are generated from `src/content/distributions.ts`, with a picture for
+  each in `art.ts`.
 - `src/components/docs/` — code blocks, install command, API entries, prose.
 - `src/components/ui/` — shadcn/ui components (`pnpm dlx shadcn@latest add …`).
 

@@ -1,4 +1,4 @@
-import { Menu } from 'lucide-react'
+import { Menu, Presentation } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,7 @@ const links = [
   { to: '/docs/distributions', label: 'Distributions', match: (p: string) => p.startsWith('/docs/distributions') },
   { to: '/api', label: 'API', match: (p: string) => p === '/api' },
   { to: '/releases', label: 'Releases', match: (p: string) => p === '/releases' },
+  { to: '/presentation', label: 'Presentation', match: (p: string) => p === '/presentation' },
 ]
 
 export function SiteHeader() {
@@ -39,6 +40,13 @@ export function SiteHeader() {
               </SheetTitle>
             </SheetHeader>
             <div className="overflow-y-auto px-3 py-4">
+              <Link
+                to="/presentation"
+                onClick={() => setOpen(false)}
+                className="mb-5 flex items-center gap-2 rounded-md border px-2.5 py-2 text-sm font-medium hover:bg-muted"
+              >
+                <Presentation className="size-4 text-brand" /> The presentation
+              </Link>
               <SidebarNav onNavigate={() => setOpen(false)} />
             </div>
           </SheetContent>
