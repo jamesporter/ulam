@@ -1,4 +1,4 @@
-import { Menu } from 'lucide-react'
+import { Menu, Presentation } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,7 @@ const links = [
   { to: '/docs/distributions', label: 'Distributions', match: (p: string) => p.startsWith('/docs/distributions') },
   { to: '/api', label: 'API', match: (p: string) => p === '/api' },
   { to: '/releases', label: 'Releases', match: (p: string) => p === '/releases' },
+  { to: '/presentation', label: 'Presentation', match: (p: string) => p === '/presentation' },
 ]
 
 export function SiteHeader() {
@@ -39,26 +40,34 @@ export function SiteHeader() {
               </SheetTitle>
             </SheetHeader>
             <div className="overflow-y-auto px-3 py-4">
+              <Link
+                to="/presentation"
+                onClick={() => setOpen(false)}
+                className="mb-5 flex items-center gap-2 rounded-md border px-2.5 py-2 text-sm font-medium hover:bg-muted"
+              >
+                <Presentation className="size-4 text-brand" /> The presentation
+              </Link>
               <SidebarNav onNavigate={() => setOpen(false)} />
             </div>
           </SheetContent>
         </Sheet>
 
-        <Link to="/" className="mr-4 flex items-center gap-2.5">
+        <Link to="/" className="mr-2 flex shrink-0 items-center gap-2.5 xl:mr-4">
           <Logo />
-          <span className="font-heading text-lg font-semibold tracking-tight">ulam-prng</span>
-          <span className="hidden rounded-full border px-2 py-0.5 font-mono text-[11px] text-muted-foreground sm:inline">
+          <span className="font-heading text-lg font-semibold tracking-tight whitespace-nowrap">ulam-prng</span>
+          {/* Room for the version only while the links are hidden, or once there is plenty */}
+          <span className="hidden rounded-full border px-2 py-0.5 font-mono text-[11px] text-muted-foreground sm:inline lg:hidden xl:inline">
             v{version}
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-0.5 lg:flex xl:gap-1">
           {links.map((l) => (
             <NavLink
               key={l.to}
               to={l.to}
               className={cn(
-                'rounded-md px-3 py-1.5 text-sm transition-colors hover:text-foreground',
+                'rounded-md px-2.5 py-1.5 text-sm whitespace-nowrap transition-colors hover:text-foreground xl:px-3',
                 l.match(pathname) ? 'font-medium text-foreground' : 'text-muted-foreground',
               )}
             >
@@ -67,9 +76,9 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <CommandMenu />
-          <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
+          <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex lg:hidden xl:inline-flex">
             <a href="https://www.npmjs.com/package/ulam-prng" target="_blank" rel="noreferrer">
               npm
             </a>

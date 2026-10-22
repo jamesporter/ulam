@@ -18,6 +18,7 @@ import { nav } from '@/content/nav'
 
 const pages = [
   { title: 'Home', to: '/', section: 'ulam-prng' },
+  { title: 'Presentation', to: '/presentation', section: 'ulam-prng' },
   ...nav.flatMap((s) => s.items.map((i) => ({ title: i.title, to: i.to, section: s.title }))),
 ]
 
@@ -90,7 +91,7 @@ export function CommandMenu() {
         variant="outline"
         size="sm"
         onClick={() => changeOpen(true)}
-        className="hidden h-8 w-56 justify-start gap-2 px-2.5 font-normal text-muted-foreground sm:inline-flex"
+        className="hidden h-8 w-48 justify-start gap-2 px-2.5 font-normal text-muted-foreground sm:inline-flex xl:w-56"
       >
         <Search className="size-3.5" />
         <span className="flex-1 text-left">Search docs…</span>
