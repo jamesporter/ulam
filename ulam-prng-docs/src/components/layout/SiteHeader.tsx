@@ -52,21 +52,22 @@ export function SiteHeader() {
           </SheetContent>
         </Sheet>
 
-        <Link to="/" className="mr-4 flex items-center gap-2.5">
+        <Link to="/" className="mr-2 flex shrink-0 items-center gap-2.5 xl:mr-4">
           <Logo />
-          <span className="font-heading text-lg font-semibold tracking-tight">ulam-prng</span>
-          <span className="hidden rounded-full border px-2 py-0.5 font-mono text-[11px] text-muted-foreground sm:inline">
+          <span className="font-heading text-lg font-semibold tracking-tight whitespace-nowrap">ulam-prng</span>
+          {/* Room for the version only while the links are hidden, or once there is plenty */}
+          <span className="hidden rounded-full border px-2 py-0.5 font-mono text-[11px] text-muted-foreground sm:inline lg:hidden xl:inline">
             v{version}
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-0.5 lg:flex xl:gap-1">
           {links.map((l) => (
             <NavLink
               key={l.to}
               to={l.to}
               className={cn(
-                'rounded-md px-3 py-1.5 text-sm transition-colors hover:text-foreground',
+                'rounded-md px-2.5 py-1.5 text-sm whitespace-nowrap transition-colors hover:text-foreground xl:px-3',
                 l.match(pathname) ? 'font-medium text-foreground' : 'text-muted-foreground',
               )}
             >
@@ -75,9 +76,9 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <CommandMenu />
-          <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
+          <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex lg:hidden xl:inline-flex">
             <a href="https://www.npmjs.com/package/ulam-prng" target="_blank" rel="noreferrer">
               npm
             </a>
